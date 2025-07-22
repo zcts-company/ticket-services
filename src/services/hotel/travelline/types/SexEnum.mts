@@ -1,0 +1,1 @@
+export type SexEnum = 'Male'|'Female'

@@ -1,0 +1,20 @@
+version: '3.2'
+services:
+  tickets-service:
+    network_mode: "host"
+    build:
+      dockerfile: Dockerfile
+
+    volumes:
+      - D:/tickets/files/:/tmp/tickets/files/
+      - D:/tickets/logs/:/var/log/ticket-services/
+      - ./src/config/:/build/config/
+    # ports:
+    #   - 48659:48659
+    #   - 48658:48658
+    environment:   
+      PINO_LOG_LEVEL: trace 
+# networks:
+#   default:
+#     external:
+#       name: host   

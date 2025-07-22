@@ -1,0 +1,6 @@
+/build
+/node_modules
+/.vscode
+/files
+/src/config/*
+deploy_dev30.bat

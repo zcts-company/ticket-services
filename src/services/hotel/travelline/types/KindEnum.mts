@@ -1,0 +1,1 @@
+export type KindEnum = 'Adult'|'ExtraAdult'|'Child'|'ExtraChild'|'ChildBandWithoutBed'

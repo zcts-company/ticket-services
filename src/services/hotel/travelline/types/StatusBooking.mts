@@ -1,0 +1,1 @@
+export type StatusBooking = 'Cancelled'|'Confirmed'

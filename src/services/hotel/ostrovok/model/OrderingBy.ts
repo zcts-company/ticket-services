@@ -1,0 +1,1 @@
+export type OrderingBy = "created_at"

@@ -1,0 +1,1 @@
+export type OrderingType = "desc"|"asc"

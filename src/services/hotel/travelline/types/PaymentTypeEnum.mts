@@ -1,0 +1,1 @@
+export type PaymentTypeEnum = 'Cash'|'PrePay'
