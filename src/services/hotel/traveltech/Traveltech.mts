@@ -46,7 +46,7 @@ export class Traveltech implements HotelService{
         this.checkDate(dateFrom)
             logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
         
-        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays - 1))   
+        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
         
         logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
 

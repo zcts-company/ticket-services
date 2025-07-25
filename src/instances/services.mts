@@ -20,7 +20,7 @@ export const hotelCacheTravelline:HotelCache = new HotelCache(travellineConfig.Z
 export const travellineZE:TicketService = new Travelline("ZE");
 export const traveltechZE:TicketService = new Traveltech("ZE");
 export const traveltechIT:TicketService = new Traveltech("IT")
-export const ostrovok:TicketService = new Ostrovok();
+// export const ostrovok:TicketService = new Ostrovok();
 
 //server instances
 export const nemoTavelServer:TicketServiceServer = new Nemo();

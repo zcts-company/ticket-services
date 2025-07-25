@@ -50,7 +50,7 @@ export class Travelline implements HotelService{
         this.checkDate(dateFrom)
             logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
         
-        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays - 1))   
+        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
         
         logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
 
@@ -118,7 +118,11 @@ export class Travelline implements HotelService{
     private createFile(reservationData: BookingResponse, key:string, updated:Date) {
         
         for (let index = 0; index < reservationData.booking.roomStays.length; index++) {
-            reservationData.booking.roomStays[index].ratePlan.description = replaceSymbols(reservationData.booking.roomStays[index].ratePlan.description)    
+            
+            if(reservationData.booking.roomStays[index].ratePlan.description){
+                reservationData.booking.roomStays[index].ratePlan.description = replaceSymbols(reservationData.booking.roomStays[index].ratePlan.description)
+            }
+                
         }
 
         const res:string = fileConverterXml.jsonToXml(reservationData);
@@ -158,7 +162,6 @@ export class Travelline implements HotelService{
         while(startDate < this.currentDate && !exist){
             try {
                 logger.trace(`[${this.getServiceName().toUpperCase()}] start checking exist of file: ${filename}.xml`)
-                logger.info(`[${this.getServiceName().toUpperCase()}] start checking exist of file: ${filename}.xml`)
                 const archivePath = `${mainArchiveDirectory}${startDate.toLocaleDateString().replace(new RegExp('[./]', 'g'),"-")}/`;
                 exist = await fileService.pathExsist(archivePath + `${filename}.xml`);
                 if(exist){
@@ -166,7 +169,7 @@ export class Travelline implements HotelService{
                 }
                 startDate.setDate(startDate.getDate() + 1)
             } catch (error) {
-                logger.error(`[${this.getServiceName().toUpperCase()}] ERROR CHECK ARHIVE: ${error}`)
+                logger.error(`[${this.getServiceName().toUpperCase()}] ERROR CHECK ARCHIVE: ${error}`)
             }
            
         }

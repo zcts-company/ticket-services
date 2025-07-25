@@ -93,7 +93,7 @@ export class HotelServiceDb {
             rows.forEach((row) => {
               // добавляем в кэш сервиса только записи из базы у который provider равен имени сервиса из config
               if(row.reservation.provider.includes(this.reservationCache.getProviderName())){
-                logger.info(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider}`)
+                logger.trace(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider}`)
                 if(row.reservation.locator){
                   logger.trace(`[DATABASE SERVICE] recived reservation from database with locator: ${row.reservation.locator}`)
                   const reservation = this.reservationCache.getItem(row.reservation.locator);
