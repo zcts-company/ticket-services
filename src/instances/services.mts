@@ -9,6 +9,7 @@ import { FileConverterXml } from "../common/converter/FileConverterXml.mjs";
 import { Ostrovok } from "../services/hotel/ostrovok/Ostrovok.mjs";
 import { Traveltech } from "../services/hotel/traveltech/Traveltech.mjs";
 import { Ufs } from "../services/rail/ufs/Ufs.mjs";
+import { Panda } from "../services/hotel/panda/Panda.mjs";
 
 
 //common instances
@@ -20,6 +21,8 @@ export const hotelCacheTravelline:HotelCache = new HotelCache(travellineConfig.Z
 export const travellineZE:TicketService = new Travelline("ZE");
 export const traveltechZE:TicketService = new Traveltech("ZE");
 export const traveltechIT:TicketService = new Traveltech("IT")
+export const pandaZE:TicketService = new Panda("ZE")
+export const pandaIT:TicketService = new Panda("IT")
 // export const ostrovok:TicketService = new Ostrovok();
 
 //server instances
@@ -28,5 +31,5 @@ export const ufsServer:TicketServiceServer = new Ufs()
  
 export const callBackServices:TicketServiceServer[] = [nemoTavelServer,ufsServer]
 
-export const services:TicketService[] = [traveltechZE, traveltechIT, travellineZE]
+export const services:TicketService[] = [traveltechZE, traveltechIT, travellineZE, pandaZE, pandaIT]
 export const servicesIndividualInterval:TicketService[] = []

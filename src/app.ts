@@ -66,8 +66,8 @@ logger.info(`[MAIN APP] main interval of checking: ${config.main.interval} secon
         const now = new Date()  
         
         // for tests
-        // dateFrom = new Date(2025,6,21,0,0,0,1)
-        // dateTo = new Date(2025,6,21,23,59,59,0)
+        // dateFrom = new Date(2025,6,28,0,0,0,1)
+        // dateTo = new Date(2025,6,28,23,59,59,0)
 
         dateFrom = new Date(now.getFullYear(),now.getMonth(),now.getDate(),0,0,0,1)
         dateTo = new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59,0)

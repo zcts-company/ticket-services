@@ -46,7 +46,7 @@ export class Traveltech implements HotelService{
         this.checkDate(dateFrom)
             logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
         
-        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
+        // this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
         
         logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
 
@@ -158,7 +158,7 @@ export class Traveltech implements HotelService{
     private async checkAllArchives(beginDate:Date,filename:String, mainArchiveDirectory:string):Promise<boolean>{
         let startDate:Date = new Date(beginDate)
         let exist:boolean = false;
-        while(startDate < this.currentDate && !exist){
+        while(startDate <= this.currentDate && !exist){
             try {
                 logger.trace(`[${this.getServiceName().toUpperCase()}] start checking exist of file: ${filename}.xml`)
                 const archivePath = `${mainArchiveDirectory}${startDate.toLocaleDateString().replace(new RegExp('[./]', 'g'),"-")}/`;

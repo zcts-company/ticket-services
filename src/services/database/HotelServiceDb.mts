@@ -53,7 +53,9 @@ export class HotelServiceDb {
                                      h.reservation
                               FROM orders o
                               LEFT JOIN orders_type_hotel h ON h.id = o.id
-                              WHERE o.${this.checkUpdate ? 'updated' : 'created'} > '${from}' AND o.${this.checkUpdate ? 'updated' : 'created'} < '${to}' AND h.reservation notNull and o.service = '${config.service.name}'`
+                              WHERE o.${this.checkUpdate ? 'updated' : 'created'} > '${from}' AND o.${this.checkUpdate ? 'updated' : 'created'} < '${to}' 
+                              AND h.reservation notNull and o.service = '${config.service.name}' 
+                              AND h.reservation ->>'provider' like '%${this.reservationCache.getProviderName()}%'`
         logger.trace(`[DATABASE SERVICE] Starting query for database. QUERY: ${query}`)
         try {
           this.pool.query(query, async (err:any, res:any) => {

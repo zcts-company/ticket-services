@@ -50,7 +50,7 @@ export class Travelline implements HotelService{
         this.checkDate(dateFrom)
             logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
         
-        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
+        // this.beginCheckDate.setDate(this.currentDate.getDate())   
         
         logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
 
@@ -110,12 +110,12 @@ export class Travelline implements HotelService{
             const reservation:any = listReservation.get(key);
             const locator:string = reservation.reservation.locator;
             const reservationData:BookingResponse = await this.webService.getOrder(locator,this.profile);
-            this.createFile(reservationData,key,reservation.updated)
+            await this.createFile(reservationData,key,reservation.updated)
         })
     }
 
 
-    private createFile(reservationData: BookingResponse, key:string, updated:Date) {
+     private async createFile(reservationData: BookingResponse, key:string, updated:Date) {
         
         for (let index = 0; index < reservationData.booking.roomStays.length; index++) {
             
@@ -128,11 +128,8 @@ export class Travelline implements HotelService{
         const res:string = fileConverterXml.jsonToXml(reservationData);
         const fileName = nameOfFile(key,updated,config[this.profile].checkUpdates);
         const path = `${this.currentDirectory}${fileName}.xml`
-        fileService.writeFile(path,res).then(() => {
-            
-            logger.info(`[${this.getServiceName().toUpperCase()}] File with name ${fileName}.xml created in directory: ${this.currentDirectory}`);
-            
-        })
+        await fileService.writeFile(path, res);
+        logger.info(`[${this.getServiceName().toUpperCase()}] File ${fileName}.xml created`);
     }
 
 
@@ -159,7 +156,7 @@ export class Travelline implements HotelService{
     private async checkAllArchives(beginDate:Date,filename:String, mainArchiveDirectory:string):Promise<boolean>{
         let startDate:Date = new Date(beginDate)
         let exist:boolean = false;
-        while(startDate < this.currentDate && !exist){
+        while(startDate <= this.currentDate && !exist){
             try {
                 logger.trace(`[${this.getServiceName().toUpperCase()}] start checking exist of file: ${filename}.xml`)
                 const archivePath = `${mainArchiveDirectory}${startDate.toLocaleDateString().replace(new RegExp('[./]', 'g'),"-")}/`;
