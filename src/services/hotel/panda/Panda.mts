@@ -38,66 +38,78 @@ export class Panda implements HotelService {
 
     
     async run(dateFrom: Date, dateTo: Date): Promise<void> {
-        this.checkDate(dateFrom)
-        logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
-        
-        this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
-        
-        logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
+       try {
+            this.checkDate(dateFrom)
+            logger.trace(`[${this.getServiceName().toUpperCase()}] run iteration for check reservation: from - ${toDateForSQL(dateFrom)} to - ${toDateForSQL(dateTo)}`)  
+            
+            this.beginCheckDate.setDate(this.currentDate.getDate() - (config[this.profile].countCheckDays))   
+            
+            logger.trace(`[${this.getServiceName().toUpperCase()}] begin check date setted - ${toDateForSQL(this.beginCheckDate)}`);
 
-        this.currentArhivePath = `${this.arhiveDirectory}${dateTo.toLocaleDateString().replace(new RegExp('[./]', 'g'),"-")}/`;
-        const directoryArhiveExist:boolean = await fileService.pathExsist(this.currentArhivePath);
-        const directoryCurrentExist:boolean = await fileService.pathExsist(this.currentDirectory);
-        const directory1CExist:boolean = await fileService.pathExsist(this.directory1C);
+            await this.checkDirectories(dateTo)
 
-        if(!directoryArhiveExist){
-            await fileService.createDirectory(this.currentArhivePath)
-            logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.currentArhivePath}`);
-        }
+            const reservations:OrderListResponse = await this.webService.getOrders(dateFrom,dateTo,1,this.profile)   
+            
+            if(typeof reservations.OrderListResponse.Orders === 'object'){
 
-        if(!directoryCurrentExist){
-            await fileService.createDirectory(this.currentDirectory)
-            logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.currentDirectory}`);
-        }
+                    let ordersRaw = reservations.OrderListResponse.Orders.Order;
 
-        if(!directory1CExist){
-            await fileService.createDirectory(this.directory1C)
-            logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.directory1C}`);
-        }
+                    if(!ordersRaw){
+                        reservations.OrderListResponse.Orders.Order = []
+                    }
 
-        const reservations:OrderListResponse = await this.webService.getOrders(dateFrom,dateTo,1,this.profile)     
-        let ordersRaw = reservations?.OrderListResponse?.Orders?.Order;
+                    reservations.OrderListResponse.Orders.Order = Array.isArray(ordersRaw) ? ordersRaw : [ordersRaw]
+                    const mapReservation:Map<string,Order> = this.convertToMap(reservations);       
 
-        if(!ordersRaw){
-            reservations.OrderListResponse.Orders.Order = []
-        }
+                    this.checkReservation(mapReservation).then((list) => {
+                        this.requestToWebService(list)
 
-        reservations.OrderListResponse.Orders.Order = Array.isArray(ordersRaw) ? ordersRaw : [ordersRaw]
-        const mapReservation:Map<string,Order> = this.convertToMap(reservations);       
+                        if(mainConf.main.transport.local){
+                            this.transportService.sendTo1CLocalPath(this.currentArhivePath)
+                        }
 
-        this.checkReservation(mapReservation).then((list) => {
-            this.requestToWebService(list)
+                        if(mainConf.main.transport.smbserver){
+                            this.transportService.sendTo1CSamba(this.currentArhivePath);
+                        }
 
-            if(mainConf.main.transport.local){
-                 this.transportService.sendTo1CLocalPath(this.currentArhivePath)
+                    }); 
+
             }
-
-            if(mainConf.main.transport.smbserver){
-                this.transportService.sendTo1CSamba(this.currentArhivePath);
-            }
-
-        }); 
-
+       } catch (error) {
+         logger.error(`[${this.getServiceName().toUpperCase()}] Error executing run: ${error}`);
+       }
 
     }
 
-    requestToWebService(listReservation: Map<string, Order>) {
-                  Array.from(listReservation.keys()).forEach(async (key) => {
-                      const reservation:Order|undefined = listReservation.get(key);
-                      if(reservation){
-                        this.createFile(reservation,key,new Date(reservation.$.Updated))
-                      }
-                  })
+    private async checkDirectories(dateTo: Date) {
+            this.currentArhivePath = `${this.arhiveDirectory}${dateTo.toLocaleDateString().replace(new RegExp('[./]', 'g'),"-")}/`;
+            const directoryArhiveExist:boolean = await fileService.pathExsist(this.currentArhivePath);
+            const directoryCurrentExist:boolean = await fileService.pathExsist(this.currentDirectory);
+            const directory1CExist:boolean = await fileService.pathExsist(this.directory1C);
+
+            if(!directoryArhiveExist){
+                await fileService.createDirectory(this.currentArhivePath)
+                logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.currentArhivePath}`);
+            }
+
+            if(!directoryCurrentExist){
+                await fileService.createDirectory(this.currentDirectory)
+                logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.currentDirectory}`);
+            }
+
+            if(!directory1CExist){
+                await fileService.createDirectory(this.directory1C)
+                logger.info(`[${this.getServiceName().toUpperCase()}] Directory created: ${this.directory1C}`);
+            }
+    }
+
+    private requestToWebService(listReservation: Map<string, Order>) {
+            Array.from(listReservation.keys()).forEach(async (key) => {
+                const reservation:Order|undefined = listReservation.get(key);
+                if(reservation){
+                this.createFile(reservation,key,new Date(reservation.$.Updated))
+                        }
+            })
     }
 
     private createFile(reservationData: Order|undefined, key:string, updated:Date) {
@@ -110,7 +122,7 @@ export class Panda implements HotelService {
             const fileName = `${nameOfFile(key, updated, config[this.profile].checkUpdates)}_${reservationData.Status.$.Id}`;
             const path = `${this.currentDirectory}${fileName}.xml`
             fileService.writeFile(path,res).then(() => {     
-                logger.info(`[${this.getServiceName().toUpperCase()}] File with name ${fileName}.xml created in directory: ${this.currentDirectory}`);     
+            logger.info(`[${this.getServiceName().toUpperCase()}] File with name ${fileName}.xml created in directory: ${this.currentDirectory}`);     
         })
        }
     }
@@ -118,11 +130,14 @@ export class Panda implements HotelService {
     private convertToMap(reservations: OrderListResponse): Map<string, Order> {
             const map = new Map<string, Order>();
             
+            if(typeof reservations.OrderListResponse.Orders === 'object'){
                 for (const entry of reservations.OrderListResponse.Orders.Order) {
                     const key = String(entry.$.Id);
                     map.set(key, entry);
                 }
-    
+
+            }
+
             return map;     
         }
 

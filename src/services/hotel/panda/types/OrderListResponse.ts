@@ -4,9 +4,7 @@ export type OrderListResponse = {
       date1: string;
       date2: string;
     };
-    Orders: {
-      Order:Order[]
-    };
+    Orders: string | { Order: Order[] }; 
   };
 };
 
