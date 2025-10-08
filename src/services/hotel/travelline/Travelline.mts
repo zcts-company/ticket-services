@@ -14,10 +14,13 @@ import mainConf from "../../../config/main-config.json" assert {type: 'json'}
 import { nameOfFile } from "../../../util/fileFunction.mjs";
 import { replaceSymbols } from "../../../util/stringFunction.mjs";
 import { ProfileType } from "../../../common/types/ProfileType";
+import { HotelInfoServiceDb } from "../../database/HotelInfoServiceDb.mjs";
+import { HotelInfo } from "./types/HotelInfo";
 
 export class Travelline implements HotelService{
 
     private database:HotelServiceDb
+    private hotelInfoDB:HotelInfoServiceDb
     private webService:HotelWebService
     private transportService:TravellineTransport;
     private currentDirectory:string
@@ -31,6 +34,7 @@ export class Travelline implements HotelService{
     constructor(profile:ProfileType){
         this.profile = profile
         this.database = new HotelServiceDb(config[this.profile].database.orders,hotelCacheTravelline,config[this.profile].checkUpdates);
+        this.hotelInfoDB = new HotelInfoServiceDb(config[this.profile].database.hotels)
         this.webService = new TravellineWebService();
         this.transportService = new TravellineTransport(profile)
         this.currentDirectory = config[this.profile].fileOutput.mainPath
@@ -110,6 +114,13 @@ export class Travelline implements HotelService{
             const reservation:any = listReservation.get(key);
             const locator:string = reservation.reservation.locator;
             const reservationData:BookingResponse = await this.webService.getOrder(locator,this.profile);
+            const hotel:HotelInfo[] = await this.hotelInfoDB.getHotelInfo(reservationData.booking.propertyId,config[this.profile].nameProvider)
+                
+                if(hotel.length === 1){
+                    reservationData.hotelInfo = hotel[0]
+                    logger.info(`[${this.getServiceName().toUpperCase()}] Set hotel to reservation ${reservationData.booking.number}: ${hotel[0].hotel_name}`);
+                }
+            
             await this.createFile(reservationData,key,reservation.updated)
         })
     }

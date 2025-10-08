@@ -10,6 +10,7 @@ import { ProfileType } from "../../../common/types/ProfileType";
 import { HotelWebService } from "../interfaces/HotelWebService.mjs";
 import { PandaWebService } from "./web-service/PandaWebService.mjs";
 import { DocumentTypePanda, Order, OrderListResponse } from "./types/OrderListResponse";
+import { OrderInfoResponse } from "./types/OrderInfoResponse";
 
 
 export class Panda implements HotelService {
@@ -106,20 +107,22 @@ export class Panda implements HotelService {
     private requestToWebService(listReservation: Map<string, Order>) {
             Array.from(listReservation.keys()).forEach(async (key) => {
                 const reservation:Order|undefined = listReservation.get(key);
+                
                 if(reservation){
-                this.createFile(reservation,key,new Date(reservation.$.Updated))
-                        }
+                    const order: OrderInfoResponse = await this.webService.getOrder(key,this.profile)
+                    this.createFile(order,key,new Date(reservation.$.Updated))
+                }
             })
     }
 
-    private createFile(reservationData: Order|undefined, key:string, updated:Date) {
+    private createFile(reservationData: OrderInfoResponse|undefined, key:string, updated:Date) {
 
        if(reservationData){
             // reservationData.rate.room.description = replaceSymbols(reservationData.rate.room.description)
             // reservationData.hotel.description = replaceSymbols(reservationData.hotel.description)
 
             const res:string = fileConverterXml.jsonToXml(reservationData);
-            const fileName = `${nameOfFile(key, updated, config[this.profile].checkUpdates)}_${reservationData.Status.$.Id}`;
+            const fileName = `${nameOfFile(key, updated, config[this.profile].checkUpdates)}_${reservationData.OrderInfoResponse.Status.$.Id}`;
             const path = `${this.currentDirectory}${fileName}.xml`
             fileService.writeFile(path,res).then(() => {     
             logger.info(`[${this.getServiceName().toUpperCase()}] File with name ${fileName}.xml created in directory: ${this.currentDirectory}`);     

@@ -6,7 +6,6 @@ import { TicketServiceServer } from "../services/interfaces/TicketServiceServer.
 import travellineConfig from "../config/hotel/travelline.json" assert {type: 'json'}
 import { FileService } from "../common/file-service/FileService.mjs";
 import { FileConverterXml } from "../common/converter/FileConverterXml.mjs";
-import { Ostrovok } from "../services/hotel/ostrovok/Ostrovok.mjs";
 import { Traveltech } from "../services/hotel/traveltech/Traveltech.mjs";
 import { Ufs } from "../services/rail/ufs/Ufs.mjs";
 import { Panda } from "../services/hotel/panda/Panda.mjs";

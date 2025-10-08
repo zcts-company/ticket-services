@@ -11,6 +11,8 @@ import { nameOfFile } from "../../../../util/fileFunction.mjs";
 import { HandCheckReservation } from "../../../../common/types/HandCheckReservation";
 import { createHttpError } from "../../../../util/errorFunction.mjs";
 import { ProfileType } from "../../../../common/types/ProfileType";
+import { HotelInfoServiceDb } from "../../../database/HotelInfoServiceDb.mjs";
+import { HotelInfo } from "../types/HotelInfo";
 
 export const loadService = express.Router();
 
@@ -32,6 +34,7 @@ loadService.post('/load',asyncHandler(
     }
     
     const transportService:TravellineTransport = new TravellineTransport(request.profile);
+    const hotelInfo = new HotelInfoServiceDb(config[request.profile].database.hotels)
 
     logger.trace(`[TRAVELLINE] Resived post request for hand check reservation file for locator: ${request.locator}`);
 
@@ -39,6 +42,11 @@ loadService.post('/load',asyncHandler(
     const updated = new Date();
 
     if(reservation){
+        const hotel:HotelInfo[] = await hotelInfo.getHotelInfo(reservation.booking.propertyId,config[request.profile].nameProvider)
+        if(hotel.length === 1){
+          logger.info(`[TRAVELLINE] Set hotel to reservation ${reservation.booking.number}: ${hotel[0].hotel_name}`);
+          reservation.hotelInfo = hotel[0]
+        }
         const path = await createFile(reservation, reservation.booking.number, updated, request.profile, transportService);
         const exist = await fileService.pathExsist(path);
         res.status(200);
