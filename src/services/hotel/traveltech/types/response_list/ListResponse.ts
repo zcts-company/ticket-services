@@ -22,8 +22,12 @@ type Order = {
   startDate: string;
   endDate: string;
   dateChanged: string;
-  documents: Document[];
-  guests: Guest[];
+  documents: Document[] | {
+    document:Document[]
+  };
+  guests: Guest[] | {
+    guest: Guest[]
+  };
   client: Client;
   billing: Billing;
 };

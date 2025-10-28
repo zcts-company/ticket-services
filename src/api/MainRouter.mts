@@ -4,6 +4,7 @@ import { routerTraveltech } from "../services/hotel/traveltech/router/RouterTrav
 import { routerUfs } from "../services/rail/ufs/router/RouterUfs.mjs";
 import { routerNemo } from "../services/air/nemo-travel/router/RouterNemo.mjs";
 import { routerPanda } from "../services/hotel/panda/router/RouterPanda.mjs";
+import { routerTTBooking } from "../services/air/ttbooking/router/RouterTTBooking.mjs";
 
 export const mainRouter = express.Router();
 
@@ -12,3 +13,4 @@ mainRouter.use("/traveltech",routerTraveltech)
 mainRouter.use("/panda",routerPanda)
 mainRouter.use('/nemo',routerNemo)
 mainRouter.use('/ufs',routerUfs)
+mainRouter.use('/ttbooking',routerTTBooking)
