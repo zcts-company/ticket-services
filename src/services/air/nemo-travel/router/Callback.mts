@@ -39,8 +39,8 @@ callback.use('',asyncHandler(
         next()
     }
 ))
-
-callback.post('/callback',auth(),valid,supplierValid,statusValid,asyncHandler(async(req:any, res:Response) => {
+// statusValid,
+callback.post('/callback',auth(),valid,supplierValid,asyncHandler(async(req:any, res:Response) => {
 
    logger.trace(`[NEMO TRAVEL] Resived post request for create reservation file: ${JSON.stringify(req.body)}`);
 

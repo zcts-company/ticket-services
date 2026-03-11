@@ -10,6 +10,7 @@ import { Traveltech } from "../services/hotel/traveltech/Traveltech.mjs";
 import { Ufs } from "../services/rail/ufs/Ufs.mjs";
 import { Panda } from "../services/hotel/panda/Panda.mjs";
 import { TTBooking } from "../services/air/ttbooking/TTBooking.mjs";
+import { UfsBus } from "../services/rail/ufs-bus/Ufs.mjs";
 
 
 //common instances
@@ -28,9 +29,10 @@ export const pandaIT: TicketService = new Panda("IT")
 //server instances
 export const nemoTavelServer: TicketServiceServer = new Nemo();
 export const ufsServer: TicketServiceServer = new Ufs()
+export const ufsBusServer: TicketServiceServer = new UfsBus()
 export const ttBookingServer: TicketServiceServer = new TTBooking()
 
-export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer]
+export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer, ufsBusServer]
 
 export const services: TicketService[] = [traveltechZE, traveltechIT, travellineZE, pandaZE, pandaIT]
 
