@@ -1,8 +1,8 @@
-import { CancellationPolicy } from "./CancellationPolicy";
-import { Price } from "./Price";
-import { Room } from "./Room";
-import { RzpvInfo } from "./RzpvInfo";
-import { SBO } from "./SBO";
+import { CancellationPolicy } from "./CancellationPolicy.js";
+import { Price } from "./Price.js";
+import { Room } from "./Room.js";
+import { RzpvInfo } from "./RzpvInfo.js";
+import { SBO } from "./SBO.js";
 
 export type Rate = {
       roomsAvailable: number;

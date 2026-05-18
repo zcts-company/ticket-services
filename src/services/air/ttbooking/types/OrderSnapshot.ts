@@ -1,11 +1,11 @@
-import { Customer } from "./Customer";
-import { Header } from "./Header";
-import { Manager } from "./Manager";
-import { Passenger } from "./Passenger";
-import { Payment } from "./Payment";
-import { Product } from "./Product";
-import { Reservation } from "./Reservation";
-import { TravelDoc } from "./TravelDoc";
+import { Customer } from "./Customer.js";
+import { Header } from "./Header.js";
+import { Manager } from "./Manager.js";
+import { Passenger } from "./Passenger.js";
+import { Payment } from "./Payment.js";
+import { Product } from "./Product.js";
+import { Reservation } from "./Reservation.js";
+import { TravelDoc } from "./TravelDoc.js";
 
 export type OrderSnapshot = {
   order_snapshot: {

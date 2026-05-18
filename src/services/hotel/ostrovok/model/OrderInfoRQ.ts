@@ -1,6 +1,6 @@
-import { LanguageType } from "../../../../model/LanguageType"
-import { OrderingBy } from "./OrderingBy"
-import { OrderingType } from "./OrderingType"
+import { LanguageType } from "../../../../model/LanguageType.js"
+import { OrderingBy } from "./OrderingBy.js"
+import { OrderingType } from "./OrderingType.js"
 
 export type OrderInfoRQ = {
         ordering: {

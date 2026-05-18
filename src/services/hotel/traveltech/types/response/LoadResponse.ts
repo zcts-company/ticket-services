@@ -1,6 +1,6 @@
-import { Order } from "../Order";
-import { Hotel } from "./Hotel";
-import { Rate } from "./Rate";
+import { Order } from "../Order.js";
+import { Hotel } from "./Hotel.js";
+import { Rate } from "./Rate.js";
 
 export type LoadResponse = {
   result: {

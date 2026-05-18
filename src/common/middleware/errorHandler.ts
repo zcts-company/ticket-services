@@ -1,0 +1,13 @@
+import { NextFunction, Request, Response } from "express";
+import { ErrorTypeResponse } from "../types/ErrorTypeResponse.js";
+
+export default function errorHandler(err:any,req:Request,res:Response,next:NextFunction) {
+
+    res.status(res.statusCode || 500);
+    const errorResponse:ErrorTypeResponse = {
+        status:res.statusCode,
+        description: typeof err === 'string' ? err : err.toString()
+    }
+    
+    res.send(errorResponse);
+}

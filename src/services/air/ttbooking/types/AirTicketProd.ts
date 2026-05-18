@@ -1,5 +1,5 @@
-import { AirSegment } from "./AirSegment";
-import { Fee } from "./Fee";
+import { AirSegment } from "./AirSegment.js";
+import { Fee } from "./Fee.js";
 
 export type AirTicketProd = {
     $: {

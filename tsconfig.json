@@ -1,18 +1,25 @@
 {
   "compilerOptions": {
-    "allowJs": true,
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "build",
-      "target": "es6",
-      "module": "ESNext",
-      "sourceMap": true , 
-      "moduleResolution":"node",
-      "isolatedModules": true,
-      "esModuleInterop": true,
-      "allowSyntheticDefaultImports":true,
-      "extendedDiagnostics":true,
-      "strict": true,
-      "resolveJsonModule": true
+    "sourceMap": true,
+    "inlineSources": true,
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "strict": true,
+    "resolveJsonModule": true
   },
-  "include": ["./src/**/*"],
-  "exclude":["node_modules",".vscode","files"]
+  "ts-node": {
+    "esm": true
+  },
+  "include": [
+    "./src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".vscode",
+    "files"
+  ]
 }

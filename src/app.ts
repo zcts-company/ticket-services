@@ -1,17 +1,17 @@
-import { callBackServices, fileService, nemoTavelServer, services, servicesIndividualInterval } from "./instances/services.mjs";
-import { TicketService } from "./services/interfaces/TicketService.mjs";
-import { toDateForSQL } from "./util/dateFunction.mjs";
-import { LOGGER_PATH } from "./common/constants/constant.mjs";
-import { changeLoggerFileName, getCurrentPath, logger } from "./common/logging/Logger.mjs";
-import config from "./config/main-config.json" assert {type: 'json'}
+import { callBackServices, fileService, nemoTavelServer, services, servicesIndividualInterval } from "./instances/services.js";
+import { TicketService } from "./services/interfaces/TicketService.js";
+import { toDateForSQL } from "./util/dateFunction.js";
+import { LOGGER_PATH } from "./common/constants/constant.js";
+import { changeLoggerFileName, getCurrentPath, logger } from "./common/logging/Logger.js";
+import config from "./config/main-config.json" with {type: 'json'}
 
 
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import errorHandler from "./common/middleware/errorHandler.mjs";
-import { mainRouter } from "./api/MainRouter.mjs";
-import auth from "./common/middleware/Authentification.mjs";
+import errorHandler from "./common/middleware/errorHandler.js";
+import { mainRouter } from "./api/MainRouter.js";
+import auth from "./common/middleware/Authentification.js";
 
 let counter = 0;
 let time = 0

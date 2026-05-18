@@ -1,4 +1,4 @@
-import { UFSPassenger } from "./UFSPassenger";
+import { UFSPassenger } from "./UFSPassenger.js";
 
 export type UFSOrder = {
   UFS_RZhD_Gate: {

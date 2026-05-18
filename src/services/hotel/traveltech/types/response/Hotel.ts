@@ -1,5 +1,5 @@
-import { Geo } from "./Geo";
-import { PrimaryServices } from "./PrimaryServices";
+import { Geo } from "./Geo.js";
+import { PrimaryServices } from "./PrimaryServices.js";
 
 export type Hotel = {
       description: string;

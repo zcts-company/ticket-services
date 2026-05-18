@@ -1,0 +1,81 @@
+import express, { Response } from "express";
+import { TravellineWebService } from "../web-service/TravellineWebService.js";
+import { BookingResponse } from "../types/BookingResponse.js";
+import asyncHandler from 'express-async-handler'
+import { TravellineTransport } from "../transport-service/TravellineTransport.js";
+import { fileConverterXml, fileService} from "../../../../instances/services.js";
+import { logger } from "../../../../common/logging/Logger.js";
+import config from "../../../../config/hotel/travelline.json" with {type: 'json'}
+import mainConfig from "../../../../config/main-config.json" with {type: 'json'}
+import { nameOfFile } from "../../../../util/fileFunction.js";
+import { HandCheckReservation } from "../../../../common/types/HandCheckReservation.js";
+import { createHttpError } from "../../../../util/errorFunction.js";
+import { ProfileType } from "../../../../common/types/ProfileType.js";
+import { HotelInfoServiceDb } from "../../../database/HotelInfoServiceDb.js";
+import { HotelInfo } from "../types/HotelInfo.js";
+
+export const loadService = express.Router();
+
+const webService = new TravellineWebService();
+
+
+loadService.post('/load',asyncHandler( 
+    
+    async(req:any, res:Response) => {
+    
+    const request: HandCheckReservation = req.body
+        
+    if(!request.locator){
+        throw createHttpError(400,`Missing 'locator' property in request body`)
+    }
+
+    if(!request.profile){
+        throw createHttpError(400,`Missing 'profile' property in request body`)
+    }
+    
+    const transportService:TravellineTransport = new TravellineTransport(request.profile);
+    const hotelInfo = new HotelInfoServiceDb(config[request.profile].database.hotels)
+
+    logger.trace(`[TRAVELLINE] Resived post request for hand check reservation file for locator: ${request.locator}`);
+
+    const reservation:BookingResponse|undefined = await webService.getOrder(request.locator,request.profile)
+    const updated = new Date();
+
+    if(reservation){
+        const hotel:HotelInfo[] = await hotelInfo.getHotelInfo(reservation.booking.propertyId,config[request.profile].nameProvider)
+        if(hotel.length === 1){
+          logger.info(`[TRAVELLINE] Set hotel to reservation ${reservation.booking.number}: ${hotel[0].hotel_name}`);
+          reservation.hotelInfo = hotel[0]
+        }
+        const path = await createFile(reservation, reservation.booking.number, updated, request.profile, transportService);
+        const exist = await fileService.pathExsist(path);
+        res.status(200);
+        res.send()
+ 
+    }
+          
+}))
+
+
+async function createFile(reservationData: BookingResponse, key: string, updated: Date, profile:ProfileType, transportService:TravellineTransport): Promise<string> {
+  try {
+    const res: string = fileConverterXml.jsonToXml(reservationData);
+    const fileName = nameOfFile(key, updated, config[profile].checkUpdates) + "_hand.xml";
+    const path = `${config[profile].fileOutput.mainPath}${fileName}`;
+
+    await fileService.writeFile(path, res);
+
+    logger.info(`[TRAVELLINE] File with name ${fileName} created by hand in directory: ${config[profile].fileOutput.mainPath}`);
+
+    if (mainConfig.main.transport.smbserver) {
+      await transportService.forceSendTo1CSamba(fileName, config[profile].fileOutput.mainPath);
+    }
+
+    return path;
+  } catch (err) {
+    logger.error(`[TRAVELLINE] Failed to create file: ${err}`);
+    throw new Error(`Failed to create reservation file: ${(err as Error).message}`);
+  }
+}
+
+

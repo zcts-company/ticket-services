@@ -1,4 +1,4 @@
-import { TicketServiceServer } from "../../interfaces/TicketServiceServer.mjs";
+import { TicketServiceServer } from "../../interfaces/TicketServiceServer.js";
 
 
 export interface RailServiceServer extends TicketServiceServer {

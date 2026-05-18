@@ -5,10 +5,14 @@
   "main": "app.ts",
   "type": "module",
   "scripts": {
-    "start": "node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/app.ts | npx pino-pretty",
+    "start_old": "node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/app.ts | npx pino-pretty",
     "start_test": "node --experimental-specifier-resolution=node  --loader ts-node/esm ./server_task/server.ts",
-    "build": "tsc --build",
-    "startprod": "node ./build/app.js | npx pino-pretty"
+    "build_old": "tsc --build",
+    "startprod": "node ./build/app.js | npx pino-pretty",
+    "debug":"node --inspect=9229 --enable-source-maps build/app.js",
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w",
+    "start": "node --enable-source-maps build/app.js"
   },
   "author": "Kirill_Chystsin",
   "license": "ISC",
@@ -21,6 +25,7 @@
     "@types/xml2js": "^0.4.14",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
+    "tsx": "^4.22.0",
     "typescript": "^5.4.5"
   },
   "dependencies": {

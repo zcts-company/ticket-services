@@ -1,5 +1,5 @@
 import { Client } from "pg";
-import { Guest } from "./response/Guest";
+import { Guest } from "./response/Guest.js";
 
 export type Order = {
       id: number;

@@ -1,4 +1,4 @@
-import { ProfileType } from "./ProfileType"
+import { ProfileType } from "./ProfileType.js"
 
 export type HandCheckReservation = {
     locator:string,

@@ -1,4 +1,4 @@
-import { PriceFeatures } from "./PriceFeatures";
+import { PriceFeatures } from "./PriceFeatures.js";
 
 export type Price = {
         currencyCode: string;
