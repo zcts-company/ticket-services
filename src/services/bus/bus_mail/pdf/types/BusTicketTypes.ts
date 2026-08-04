@@ -170,7 +170,7 @@ export interface ParsedBusTicketDocument {
     trip: BusTicketTrip;
     purchase: BusTicketPurchase;
     pricing: BusTicketPricing;
-
+    comment?: string;
     warnings: BusTicketParseWarning[];
 }
 

@@ -10,7 +10,6 @@ export class PdfAnalysisService {
 
         try {
             const infoResult = await parser.getInfo();
-
             const textResult = await parser.getText({
                 /*
                  * Отключаем добавление текстовых маркеров
@@ -23,31 +22,22 @@ export class PdfAnalysisService {
             });
 
             const pages = this.mapPages(textResult.pages);
-
             const rawText = pages.map((page) => page.rawText).join("\n\n");
-
             const normalizedText = pages.map((page) => page.normalizedText)
                 .filter(Boolean)
                 .join("\n\n");
 
             if (!normalizedText) {
-                throw new Error(
-                    `No text could be extracted from PDF ` +
-                    `"${attachment.filename}". ` +
-                    `The document may contain scanned images only`
-                );
+                throw new Error(`No text could be extracted from PDF ` + `"${attachment.filename}". ` + `The document may contain scanned images only`);
             }
 
             return {
                 filename:
                     attachment.filename,
-
                 contentType:
                     attachment.contentType,
-
                 checksum:
                     attachment.checksum,
-
                 size:
                     attachment.size,
 
@@ -82,50 +72,27 @@ export class PdfAnalysisService {
                     )
             };
         } catch (error: unknown) {
-            throw new Error(
-                `Could not analyze PDF ` +
-                `"${attachment.filename}": ` +
-                this.getErrorMessage(error)
-            );
+            throw new Error(`Could not analyze PDF ` + `"${attachment.filename}": ` + this.getErrorMessage(error));
         } finally {
             await parser.destroy();
         }
     }
 
-    private mapPages(
-        pages: Array<{
-            num: number;
-            text: string;
-        }>
-    ): PdfPageAnalysisResult[] {
+    private mapPages(pages: Array<{ num: number; text: string; }>): PdfPageAnalysisResult[] {
         return pages.map((page) => {
-            const rawText =
-                typeof page.text === "string"
-                    ? page.text
-                    : "";
-
-            const normalizedText =
-                this.normalizeText(rawText);
+            const rawText = typeof page.text === "string" ? page.text : "";
+            const normalizedText = this.normalizeText(rawText);
 
             return {
-                pageNumber:
-                    page.num,
-
+                pageNumber: page.num,
                 rawText,
-
                 normalizedText,
-
-                lines:
-                    this.extractLines(
-                        normalizedText
-                    )
+                lines: this.extractLines(normalizedText)
             };
         });
     }
 
-    private normalizeText(
-        text: string
-    ): string {
+    private normalizeText(text: string): string {
         return text
             .replace(/\uFFFE/g, "-")
             .replace(/[\u00AD\uFFFF]/g, "")
@@ -139,105 +106,50 @@ export class PdfAnalysisService {
             .trim();
     }
 
-    private extractLines(
-        text: string
-    ): string[] {
+    private extractLines(text: string): string[] {
         return text
             .split("\n")
             .map((line) => line.trim())
-            .filter(
-                (line) =>
-                    line.length > 0
-            );
+            .filter((line) => line.length > 0);
     }
 
-    private mapMetadata(
-        info: unknown
-    ): PdfDocumentMetadata {
+    private mapMetadata(info: unknown): PdfDocumentMetadata {
         if (!this.isRecord(info)) {
             return {};
         }
 
         return {
-            title:
-                this.toOptionalString(
-                    info.Title
-                ),
-
-            author:
-                this.toOptionalString(
-                    info.Author
-                ),
-
-            subject:
-                this.toOptionalString(
-                    info.Subject
-                ),
-
-            creator:
-                this.toOptionalString(
-                    info.Creator
-                ),
-
-            producer:
-                this.toOptionalString(
-                    info.Producer
-                ),
-
-            creationDate:
-                this.toOptionalDateString(
-                    info.CreationDate
-                ),
-
-            modificationDate:
-                this.toOptionalDateString(
-                    info.ModDate
-                )
+            title: this.toOptionalString(info.Title),
+            author: this.toOptionalString(info.Author),
+            subject: this.toOptionalString(info.Subject),
+            creator: this.toOptionalString(info.Creator),
+            producer: this.toOptionalString(info.Producer),
+            creationDate: this.toOptionalDateString(info.CreationDate),
+            modificationDate: this.toOptionalDateString(info.ModDate)
         };
     }
 
-    private isRecord(
-        value: unknown
-    ): value is Record<string, unknown> {
-        return (
-            typeof value === "object" &&
-            value !== null &&
-            !Array.isArray(value)
-        );
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return (typeof value === "object" && value !== null && !Array.isArray(value));
     }
 
-    private toOptionalString(
-        value: unknown
-    ): string | undefined {
+    private toOptionalString(value: unknown): string | undefined {
         if (typeof value !== "string") {
             return undefined;
         }
-
-        const normalizedValue =
-            value.trim();
-
+        const normalizedValue = value.trim();
         return normalizedValue || undefined;
     }
 
-    private toOptionalDateString(
-        value: unknown
-    ): string | undefined {
+    private toOptionalDateString(value: unknown): string | undefined {
         if (value instanceof Date) {
-            return Number.isNaN(
-                value.getTime()
-            )
-                ? undefined
-                : value.toISOString();
+            return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
         }
 
-        return this.toOptionalString(
-            value
-        );
+        return this.toOptionalString(value);
     }
 
-    private getErrorMessage(
-        error: unknown
-    ): string {
+    private getErrorMessage(error: unknown): string {
         if (error instanceof Error) {
             return error.message;
         }

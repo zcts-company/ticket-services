@@ -257,8 +257,7 @@ export class BusMailService implements BusTicketService {
     private async processMessage(mail: IncomingMail): Promise<void> {
         logger.info(`[${this.getServiceName()}] ` + `Starting PDF processing. ` + `UID: ${mail.uid}`);
         const processedTickets = await this.pdfProcessingService.processMail(mail);
-        logger.info(`[${this.getServiceName()}] ` + `PDF attachments processed. ` + `UID: ${mail.uid}, ` + `documents: ${processedTickets.length}`
-        );
+        logger.info(`[${this.getServiceName()}] ` + `PDF attachments processed. ` + `UID: ${mail.uid}, ` + `documents: ${processedTickets.length}`);
 
         for (const processedTicket of processedTickets) {
             await this.processParsedDocument(mail, processedTicket);
@@ -343,7 +342,12 @@ export class BusMailService implements BusTicketService {
             `${document.pricing.currency ?? ""}`
         );
 
-        const xmlContent = fileConverterXml.jsonToXml(document);
+        const documentForXml: ParsedBusTicketDocument = {
+            ...document,
+            comment: this.normalizeMailSubject(mail.subject)
+        };
+
+        const xmlContent = fileConverterXml.jsonToXml(documentForXml);
         const outputName = this.createOutputName(mail, document);
         const xmlPath = join(this.currentDirectory, `${outputName}.xml`);
         const pdfPath = join(this.currentDirectory, `${outputName}.pdf`);
@@ -403,5 +407,15 @@ export class BusMailService implements BusTicketService {
         }
 
         return sanitized.slice(0, 150);
+    }
+
+    private normalizeMailSubject(subject: string | undefined): string {
+        if (!subject) {
+            return "";
+        }
+
+        return subject
+            .replace(/\s+/g, " ")
+            .trim();
     }
 }

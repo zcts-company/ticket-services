@@ -34,52 +34,13 @@ export class BusTicketPdfParserService {
      * analysis.normalizedText должен содержать текст
      * только одного билета или одной страницы.
      */
-    // parse(analysis: PdfAnalysisResult): ParsedBusTicketDocument {
-    //     const detectedParsers: DetectedParser[] = this.parsers
-    //         .map((parser) => ({ parser, detection: parser.detect(analysis) }))
-    //         .sort((first, second) => second.detection.confidence - first.detection.confidence);
-
-    //     const selectedParser = detectedParsers.find(
-    //         ({ detection }) =>
-    //             detection.supported
-    //     );
-
-    //     if (!selectedParser) {
-    //         throw new UnsupportedPdfFormatError(
-    //             analysis.filename,
-
-    //             detectedParsers.map(
-    //                 ({ parser, detection }) => ({
-    //                     parserId:
-    //                         parser.id,
-
-    //                     confidence:
-    //                         detection.confidence
-    //                 })
-    //             )
-    //         );
-    //     }
-
-    //     return selectedParser.parser.parse(analysis, selectedParser.detection);
-    // }
 
     parse(analysis: PdfAnalysisResult): ParsedBusTicketDocument {
         const detectedParsers: DetectedParser[] = this.parsers
-            .map((parser) => ({
-                parser,
-                detection:
-                    parser.detect(analysis)
-            }))
-            .sort(
-                (first, second) =>
-                    second.detection.confidence -
-                    first.detection.confidence
-            );
+            .map((parser) => ({ parser, detection: parser.detect(analysis) }))
+            .sort((first, second) => second.detection.confidence - first.detection.confidence);
 
-        const supportedParsers = detectedParsers.filter(
-            ({ detection }) =>
-                detection.supported
-        );
+        const supportedParsers = detectedParsers.filter(({ detection }) => detection.supported);
 
         if (supportedParsers.length === 0) {
             const detectionDetails = detectedParsers
@@ -93,39 +54,20 @@ export class BusTicketPdfParserService {
                 })
                 .join(" | ");
 
-            throw new Error(
-                `Unsupported PDF ticket format: ` +
-                `"${analysis.filename}", ` +
-                `page ${analysis.pageNumber ?? 1}. ` +
-                `Detection results: ${detectionDetails}`
-            );
+            throw new Error(`Unsupported PDF ticket format: ` + `"${analysis.filename}", ` + `page ${analysis.pageNumber ?? 1}. ` + `Detection results: ${detectionDetails}`);
         }
 
         const parserErrors: string[] = [];
 
-        for (
-            const {
-                parser,
-                detection
-            } of supportedParsers
-        ) {
+        for (const { parser, detection } of supportedParsers) {
             try {
                 return parser.parse(analysis, detection);
             } catch (error: unknown) {
-                parserErrors.push(
-                    `${parser.id} ` +
-                    `(confidence: ${detection.confidence}): ` +
-                    this.getErrorMessage(error)
-                );
+                parserErrors.push(`${parser.id} ` + `(confidence: ${detection.confidence}): ` + this.getErrorMessage(error));
             }
         }
 
-        throw new Error(
-            `All detected PDF parsers failed for ` +
-            `"${analysis.filename}", ` +
-            `page ${analysis.pageNumber ?? 1}. ` +
-            parserErrors.join(" | ")
-        );
+        throw new Error(`All detected PDF parsers failed for ` + `"${analysis.filename}", ` + `page ${analysis.pageNumber ?? 1}. ` + parserErrors.join(" | "));
     }
 
     /**

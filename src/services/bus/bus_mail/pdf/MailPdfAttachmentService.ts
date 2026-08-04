@@ -4,37 +4,23 @@ import { PdfMailAttachment } from "./types/PdfTypes.js";
 
 export class MailPdfAttachmentService {
 
-    private readonly maxPdfSizeBytes =
-        25 * 1024 * 1024;
+    private readonly maxPdfSizeBytes = 25 * 1024 * 1024;
 
     async extractPdfAttachments(mailSource: Buffer): Promise<PdfMailAttachment[]> {
         if (!Buffer.isBuffer(mailSource)) {
-            throw new Error(
-                "Mail source must be a Buffer"
-            );
+            throw new Error("Mail source must be a Buffer");
         }
 
         if (mailSource.length === 0) {
-            throw new Error(
-                "Mail source is empty"
-            );
+            throw new Error("Mail source is empty");
         }
 
-        const parsedMail = await simpleParser(
-            mailSource,
-            {
-                skipHtmlToText: true,
-                skipTextToHtml: true,
-                skipImageLinks: true,
-                checksumAlgo: "sha256"
-            }
-        );
+        const parsedMail = await simpleParser(mailSource, { skipHtmlToText: true, skipTextToHtml: true, skipImageLinks: true, checksumAlgo: "sha256" });
 
         const result: PdfMailAttachment[] = [];
 
         for (let attachmentIndex = 0; attachmentIndex < parsedMail.attachments.length; attachmentIndex++) {
             const attachment = parsedMail.attachments[attachmentIndex];
-
             const content = this.copyBinaryData(attachment.content);
 
             if (!this.looksLikePdf(attachment.filename, attachment.contentType, content)) {
@@ -44,9 +30,7 @@ export class MailPdfAttachmentService {
             const filename = attachment.filename?.trim() || `attachment-${attachmentIndex + 1}.pdf`;
 
             if (content.length === 0) {
-                throw new Error(
-                    `PDF attachment "${filename}" is empty`
-                );
+                throw new Error(`PDF attachment "${filename}" is empty`);
             }
 
             if (content.length > this.maxPdfSizeBytes) {
@@ -59,21 +43,16 @@ export class MailPdfAttachmentService {
 
             result.push({
                 filename,
-
                 contentType:
                     attachment.contentType ||
                     "application/pdf",
-
                 contentDisposition:
                     attachment.contentDisposition,
-
                 checksum:
                     attachment.checksum,
-
                 size:
                     attachment.size ??
                     content.length,
-
                 content
             });
         }
@@ -82,17 +61,11 @@ export class MailPdfAttachmentService {
     }
 
     private looksLikePdf(filename: string | undefined, contentType: string | undefined, content: ArrayLike<number>): boolean {
-        const normalizedFilename =
-            filename?.trim().toLowerCase() ?? "";
+        const normalizedFilename = filename?.trim().toLowerCase() ?? "";
 
-        const normalizedContentType =
-            contentType?.trim().toLowerCase() ?? "";
+        const normalizedContentType = contentType?.trim().toLowerCase() ?? "";
 
-        return (
-            normalizedFilename.endsWith(".pdf") ||
-            normalizedContentType === "application/pdf" ||
-            this.hasPdfSignature(content)
-        );
+        return (normalizedFilename.endsWith(".pdf") || normalizedContentType === "application/pdf" || this.hasPdfSignature(content));
     }
 
     /**

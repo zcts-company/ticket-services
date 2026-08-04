@@ -30,50 +30,27 @@ export class BusTransportService {
         }
 
         const fileName = path.basename(localFilePath);
-
         const remoteFilePath = this.createRemoteFilePath(fileName);
 
         try {
             logger.info(`[BUS TRANSPORT] Sending file ` + `"${localFilePath}" to Samba ` + `"${remoteFilePath}"`);
             await this.sambaClient.sendFile(localFilePath, remoteFilePath);
-
             const remoteFileExists = await this.sambaClient.fileExists(remoteFilePath);
-
             if (!remoteFileExists) {
                 throw new Error(`File was sent, but Samba did not ` + `confirm its existence: ` + `"${remoteFilePath}"`);
             }
-
-            logger.info(
-                `[BUS TRANSPORT] File "${fileName}" ` +
-                `successfully sent to Samba server ` +
-                `"${config.samba.server}"`
-            );
-
-            await this.removeLocalFile(
-                localFilePath
-            );
+            logger.info(`[BUS TRANSPORT] File "${fileName}" ` + `successfully sent to Samba server ` + `"${config.samba.server}"`);
+            await this.removeLocalFile(localFilePath);
         } catch (error: unknown) {
-            const errorMessage =
-                this.getErrorMessage(
-                    error
-                );
+            const errorMessage = this.getErrorMessage(error);
 
-            logger.error(
-                `[BUS TRANSPORT] Could not send file ` +
-                `"${localFilePath}" to Samba. ` +
-                `Remote path: "${remoteFilePath}". ` +
-                `Error: ${errorMessage}`
-            );
-
+            logger.error(`[BUS TRANSPORT] Could not send file ` + `"${localFilePath}" to Samba. ` + `Remote path: "${remoteFilePath}". ` + `Error: ${errorMessage}`);
             /*
              * Обязательно пробрасываем ошибку.
              * Тогда процесс обработки письма завершится
              * ошибкой, и письмо не будет удалено.
              */
-            throw new Error(
-                `Could not send file "${fileName}" ` +
-                `to Samba: ${errorMessage}`
-            );
+            throw new Error(`Could not send file "${fileName}" ` + `to Samba: ${errorMessage}`);
         }
     }
 
