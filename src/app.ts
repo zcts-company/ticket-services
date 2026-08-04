@@ -1,11 +1,9 @@
-import { callBackServices, fileService, nemoTavelServer, services, servicesIndividualInterval } from "./instances/services.js";
+import { callBackServices, fileService, services } from "./instances/services.js";
 import { TicketService } from "./services/interfaces/TicketService.js";
 import { toDateForSQL } from "./util/dateFunction.js";
 import { LOGGER_PATH } from "./common/constants/constant.js";
 import { changeLoggerFileName, getCurrentPath, logger } from "./common/logging/Logger.js";
 import config from "./config/main-config.json" with {type: 'json'}
-
-
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";

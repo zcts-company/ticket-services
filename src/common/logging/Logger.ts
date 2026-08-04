@@ -1,61 +1,66 @@
-import {pino, type Logger} from "pino";
-import config from "../../config/main-config.json" with {type: 'json'} 
+// import { pino, type Logger } from "pino";
+import {
+  pino,
+  transport as createTransport,
+  type Logger
+} from "pino";
+import config from "../../config/main-config.json" with {type: 'json'}
 
 
 
-let currentPath:string = `${config.main.loggerPath}${new Date().toLocaleDateString().replace(new RegExp('[./]', 'g'),"_")}.log`
+let currentPath: string = `${config.main.loggerPath}${new Date().toLocaleDateString().replace(new RegExp('[./]', 'g'), "_")}.log`
 
-let transport = pino.transport({
+let transport = createTransport({
+  targets: [
+    {
+      level: config.main.loggerLevel || "info",
+      target: 'pino-pretty',
+      options: { destination: currentPath },
+    },
+    {
+      level: config.main.loggerLevel || "info",
+      target: 'pino-pretty' // по-умолчанию логирует в стандартный вывод
+    },
+  ],
+});
+
+export let logger: Logger = pino(
+  {
+    level: config.main.loggerLevel || "info",
+    timestamp: pino.stdTimeFunctions.isoTime
+  },
+  transport
+);
+
+
+export function changeLoggerFileName(date: Date) {
+
+  currentPath = `${config.main.loggerPath}${`${date.toLocaleDateString().replace(new RegExp('[./]', 'g'), "_")}.log`}`
+
+  transport = createTransport({
     targets: [
       {
-        level:config.main.loggerLevel || "info",
+        level: config.main.loggerLevel || "info",
         target: 'pino-pretty',
-        options: { destination: currentPath},
+        options: { destination: currentPath },
       },
       {
-        level:config.main.loggerLevel || "info",
+        level: config.main.loggerLevel || "info",
         target: 'pino-pretty' // по-умолчанию логирует в стандартный вывод
       },
     ],
   });
 
-export let logger:Logger = pino(
+  logger = pino(
     {
-        level: config.main.loggerLevel || "info",
-        timestamp: pino.stdTimeFunctions.isoTime
+      level: config.main.loggerLevel || "info",
+      timestamp: pino.stdTimeFunctions.isoTime
     },
     transport
-);
-
-
-export function changeLoggerFileName(date:Date){
-
-      currentPath = `${config.main.loggerPath}${`${date.toLocaleDateString().replace(new RegExp('[./]', 'g'),"_")}.log`}`
-
-      transport = pino.transport({
-          targets: [
-              {
-                level:config.main.loggerLevel || "info",
-                target: 'pino-pretty',
-                options: { destination: currentPath},
-              },
-              {
-                level:config.main.loggerLevel || "info",
-                target: 'pino-pretty' // по-умолчанию логирует в стандартный вывод
-              },
-           ],
-      });
-
-      logger = pino(
-        {
-            level: config.main.loggerLevel || "info",
-            timestamp: pino.stdTimeFunctions.isoTime
-        },
-        transport
-    );
+  );
 
 }
 
-export function getCurrentPath(){
+export function getCurrentPath() {
   return currentPath
 }

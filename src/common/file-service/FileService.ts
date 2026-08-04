@@ -3,27 +3,32 @@ import fs from "fs-extra"
 
 export class FileService {
 
-    constructor(){
+    constructor() {
 
     }
 
-    async pathExsist(path:string){
+    async pathExsist(path: string) {
         return await fs.pathExists(path)
     }
 
-    async writeFile(path:string,data:string){
-        await fs.outputFile(path,data)
+    async writeFile(path: string, data: string) {
+        await fs.outputFile(path, data)
     }
 
-    async createDirectory(path:string){
+    async writePdfFile(path: string, data: Uint8Array | Buffer): Promise<void> {
+        const pdfBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        await fs.outputFile(path, pdfBuffer);
+    }
+
+    async createDirectory(path: string) {
         await fs.ensureDir(path);
     }
 
-    async readFile(path:string){
-       return await fs.readFile(path)
+    async readFile(path: string) {
+        return await fs.readFile(path)
     }
 
-    async readDiretory(path:string){
+    async readDiretory(path: string) {
         return await fs.readdir(path);
     }
 

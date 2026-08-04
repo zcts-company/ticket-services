@@ -9,7 +9,7 @@
     "start_test": "node --experimental-specifier-resolution=node  --loader ts-node/esm ./server_task/server.ts",
     "build_old": "tsc --build",
     "startprod": "node ./build/app.js | npx pino-pretty",
-    "debug":"node --inspect=9229 --enable-source-maps build/app.js",
+    "debug": "node --inspect=9229 --enable-source-maps build/app.js",
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json -w",
     "start": "node --enable-source-maps build/app.js"
@@ -20,13 +20,14 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.12.11",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^20.19.43",
     "@types/pg": "^8.11.6",
     "@types/xml2js": "^0.4.14",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
     "tsx": "^4.22.0",
-    "typescript": "^5.4.5"
+    "typescript": "5.9"
   },
   "dependencies": {
     "@joi/date": "^2.1.1",
@@ -37,8 +38,12 @@
     "express": "^4.19.2",
     "express-async-handler": "^1.2.0",
     "fs-extra": "^11.2.0",
+    "imapflow": "^1.5.0",
     "joi": "^17.13.1",
     "js-base64": "^3.7.7",
+    "mailparser": "^3.9.14",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.11.5",
     "pino": "^9.1.0",
     "pino-pretty": "^11.1.0",
