@@ -171,6 +171,7 @@ export interface ParsedBusTicketDocument {
     purchase: BusTicketPurchase;
     pricing: BusTicketPricing;
     comment?: string;
+    employee?:string;
     ticketNumbers?: {
         ticketNumber: string[];
     };
