@@ -254,13 +254,37 @@ export class BusMailService implements BusTicketService {
      * - вызвать нужный сервис.
      */
 
+    // private async processMessage(mail: IncomingMail): Promise<void> {
+    //     logger.info(`[${this.getServiceName()}] ` + `Starting PDF processing. ` + `UID: ${mail.uid}`);
+    //     const processedTickets = await this.pdfProcessingService.processMail(mail);
+    //     logger.info(`[${this.getServiceName()}] ` + `PDF attachments processed. ` + `UID: ${mail.uid}, ` + `documents: ${processedTickets.length}`);
+
+    //     for (const processedTicket of processedTickets) {
+    //         await this.processParsedDocument(mail, processedTicket);
+    //     }
+    // }
+
     private async processMessage(mail: IncomingMail): Promise<void> {
         logger.info(`[${this.getServiceName()}] ` + `Starting PDF processing. ` + `UID: ${mail.uid}`);
+
         const processedTickets = await this.pdfProcessingService.processMail(mail);
+
         logger.info(`[${this.getServiceName()}] ` + `PDF attachments processed. ` + `UID: ${mail.uid}, ` + `documents: ${processedTickets.length}`);
 
+        /*
+         * На этом этапе обработаны ВСЕ PDF-вложения письма
+         * и ВСЕ билеты внутри этих PDF.
+         */
+        const ticketNumbers = [
+            ...new Set(
+                processedTickets.map((processedTicket) =>
+                    this.getTicketNumber(mail, processedTicket.document)
+                )
+            )
+        ];
+
         for (const processedTicket of processedTickets) {
-            await this.processParsedDocument(mail, processedTicket);
+            await this.processParsedDocument(mail, processedTicket, ticketNumbers);
         }
     }
 
@@ -320,7 +344,74 @@ export class BusMailService implements BusTicketService {
             : date;
     }
 
-    private async processParsedDocument(mail: IncomingMail, processedTicket: ProcessedBusTicket): Promise<void> {
+    // private async processParsedDocument(mail: IncomingMail, processedTicket: ProcessedBusTicket): Promise<void> {
+    //     const { document, pdfContent } = processedTicket;
+
+    //     logger.info(
+    //         `[${this.getServiceName()}] Parsed bus ticket. ` +
+    //         `UID: ${mail.uid}, ` +
+    //         `filename: "${document.source.filename}", ` +
+    //         `page: ${document.source.pageNumber ?? 1}, ` +
+    //         `parser: ${document.parser.id}, ` +
+    //         `confidence: ${document.parser.confidence}, ` +
+    //         `carrierTicketNumber: ` +
+    //         `${document.identifiers.carrierTicketNumber ?? "unknown"}, ` +
+    //         `itineraryNumber: ` +
+    //         `${document.identifiers.itineraryNumber ?? "unknown"}, ` +
+    //         `route: "${document.trip.routeName ?? "unknown"}", ` +
+    //         `departureDate: ` +
+    //         `${document.trip.departure.date ?? "unknown"}, ` +
+    //         `total: ` +
+    //         `${document.pricing.total ?? "unknown"} ` +
+    //         `${document.pricing.currency ?? ""}`
+    //     );
+
+    //     const documentForXml: ParsedBusTicketDocument = {
+    //         ...document,
+    //         comment: this.normalizeMailSubject(mail.subject)
+    //     };
+
+    //     const xmlContent = fileConverterXml.jsonToXml(documentForXml);
+    //     const outputName = this.createOutputName(mail, document);
+    //     const xmlPath = join(this.currentDirectory, `${outputName}.xml`);
+    //     const pdfPath = join(this.currentDirectory, `${outputName}.pdf`);
+
+    //     /*
+    //      * Одинаковое базовое имя:
+    //      *
+    //      * 1597.xml
+    //      * 1597.pdf
+    //      */
+    //     await this.fileService.writeFile(xmlPath, xmlContent);
+    //     await this.fileService.writePdfFile(pdfPath, Buffer.from(pdfContent));
+
+    //     await this.transportService.sendFile(xmlPath);
+    //     await this.transportService.sendFile(pdfPath);
+
+    //     logger.info(`[${this.getServiceName()}] Ticket files sent ` + `to Samba successfully. ` + `UID: ${mail.uid}, ` + `ticket: "${outputName}"`);
+    //     logger.info(`[${this.getServiceName()}] Ticket files saved. ` + `UID: ${mail.uid}, ` + `XML: "${xmlPath}", ` + `PDF: "${pdfPath}"`);
+    // }
+
+    // private createOutputName(mail: IncomingMail, document: ParsedBusTicketDocument): string {
+    //     const itineraryIdentifier = document.identifiers.itinerarySeries && document.identifiers.itineraryNumber
+    //         ? (
+    //             `${document.identifiers.itinerarySeries}_` +
+    //             `${document.identifiers.itineraryNumber}`
+    //         )
+    //         : document.identifiers.itineraryNumber;
+
+    //     const identifier = document.identifiers.carrierTicketNumber ??
+    //         itineraryIdentifier ??
+    //         document.identifiers.receiptId ??
+    //         (
+    //             `mail_${mail.uid}_` +
+    //             `page_${document.source.pageNumber ?? 1}`
+    //         );
+
+    //     return this.sanitizeFilename(identifier);
+    // }
+
+    private async processParsedDocument(mail: IncomingMail, processedTicket: ProcessedBusTicket, ticketNumbers: string[]): Promise<void> {
         const { document, pdfContent } = processedTicket;
 
         logger.info(
@@ -342,22 +433,22 @@ export class BusMailService implements BusTicketService {
             `${document.pricing.currency ?? ""}`
         );
 
+        const outputName = this.createOutputName(mail, document);
+
+        const xmlPath = join(this.currentDirectory, `${outputName}.xml`);
+
+        const pdfPath = join(this.currentDirectory, `${outputName}.pdf`);
+
         const documentForXml: ParsedBusTicketDocument = {
             ...document,
-            comment: this.normalizeMailSubject(mail.subject)
+            comment: this.normalizeMailSubject(mail.subject),
+            ticketNumbers: {
+                ticketNumber: ticketNumbers
+            },
+            pdfFileName: `${outputName}.pdf`
         };
 
         const xmlContent = fileConverterXml.jsonToXml(documentForXml);
-        const outputName = this.createOutputName(mail, document);
-        const xmlPath = join(this.currentDirectory, `${outputName}.xml`);
-        const pdfPath = join(this.currentDirectory, `${outputName}.pdf`);
-
-        /*
-         * Одинаковое базовое имя:
-         *
-         * 1597.xml
-         * 1597.pdf
-         */
         await this.fileService.writeFile(xmlPath, xmlContent);
         await this.fileService.writePdfFile(pdfPath, Buffer.from(pdfContent));
 
@@ -369,22 +460,7 @@ export class BusMailService implements BusTicketService {
     }
 
     private createOutputName(mail: IncomingMail, document: ParsedBusTicketDocument): string {
-        const itineraryIdentifier = document.identifiers.itinerarySeries && document.identifiers.itineraryNumber
-            ? (
-                `${document.identifiers.itinerarySeries}_` +
-                `${document.identifiers.itineraryNumber}`
-            )
-            : document.identifiers.itineraryNumber;
-
-        const identifier = document.identifiers.carrierTicketNumber ??
-            itineraryIdentifier ??
-            document.identifiers.receiptId ??
-            (
-                `mail_${mail.uid}_` +
-                `page_${document.source.pageNumber ?? 1}`
-            );
-
-        return this.sanitizeFilename(identifier);
+        return this.sanitizeFilename(this.getTicketNumber(mail, document));
     }
 
     private sanitizeFilename(value: string): string {
@@ -417,5 +493,13 @@ export class BusMailService implements BusTicketService {
         return subject
             .replace(/\s+/g, " ")
             .trim();
+    }
+
+    private getTicketNumber(mail: IncomingMail, document: ParsedBusTicketDocument): string {
+        const itineraryIdentifier = document.identifiers.itinerarySeries && document.identifiers.itineraryNumber
+            ? (`${document.identifiers.itinerarySeries}_` + `${document.identifiers.itineraryNumber}`)
+            : document.identifiers.itineraryNumber;
+
+        return (document.identifiers.carrierTicketNumber ?? itineraryIdentifier ?? document.identifiers.receiptId ?? (`mail_${mail.uid}_` + `page_${document.source.pageNumber ?? 1}`));
     }
 }

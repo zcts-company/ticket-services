@@ -171,6 +171,10 @@ export interface ParsedBusTicketDocument {
     purchase: BusTicketPurchase;
     pricing: BusTicketPricing;
     comment?: string;
+    ticketNumbers?: {
+        ticketNumber: string[];
+    };
+    pdfFileName?: string;
     warnings: BusTicketParseWarning[];
 }
 
