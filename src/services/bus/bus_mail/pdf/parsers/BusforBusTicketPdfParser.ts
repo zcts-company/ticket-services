@@ -14,6 +14,14 @@ interface RouteTableData {
     platform?: string;
 }
 
+interface BusTicketTripData {
+    seat?: string;
+    platform?: string;
+
+    departure?: ExtractedDateTime;
+    arrival?: ExtractedDateTime;
+}
+
 export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
     readonly id = "busfor-russia-v1";
@@ -23,40 +31,15 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const text = analysis.normalizedText;
         const matchedMarkers: string[] = [];
 
-        this.addMarker(
-            matchedMarkers,
-            text,
-            /Маршрутная квитанция электронного билета/i,
-            "BUSFOR_ITINERARY_RECEIPT"
-        );
+        this.addMarker(matchedMarkers, text, /Маршрутная квитанция электронного билета/i, "BUSFOR_ITINERARY_RECEIPT");
+        this.addMarker(matchedMarkers, text, /E-Ticket itinerary receipt/i, "ETICKET_ITINERARY_RECEIPT");
+        this.addMarker(matchedMarkers, text, /\bBUSFOR(?:\.RU)?\b/i, "BUSFOR");
+        this.addMarker(matchedMarkers, text, /ООО\s+Басфор/i, "BUSFOR_AGENT");
+        this.addMarker(matchedMarkers, text, /ПРОЕЗДНОЙ ДОКУМЕНТ НА АВТОБУС\s*\/\s*BUS TICKET/i, "BUS_TICKET");
 
-        this.addMarker(
-            matchedMarkers,
-            text,
-            /E-Ticket itinerary receipt/i,
-            "ETICKET_ITINERARY_RECEIPT"
-        );
-
-        this.addMarker(
-            matchedMarkers,
-            text,
-            /\bBUSFOR(?:\.RU)?\b/i,
-            "BUSFOR"
-        );
-
-        this.addMarker(
-            matchedMarkers,
-            text,
-            /ООО\s+Басфор/i,
-            "BUSFOR_AGENT"
-        );
-
-        this.addMarker(
-            matchedMarkers,
-            text,
-            /ПРОЕЗДНОЙ ДОКУМЕНТ НА АВТОБУС\s*\/\s*BUS TICKET/i,
-            "BUS_TICKET"
-        );
+        this.addMarker(matchedMarkers, text, /РАСЧЕТ СТОИМОСТИ\s*\/\s*FARE CALCULATION/i, "FARE_CALCULATION");
+        this.addMarker(matchedMarkers, text, /КОНТРОЛЬНЫЙ НОМЕР\s*\/\s*CHECK NUMBER/i, "CHECK_NUMBER");
+        this.addMarker(matchedMarkers, text, /ФАМИЛИЯ ПАССАЖИРА\s*\/\s*NAME OF PASSENGER/i, "PASSENGER_NAME");
 
         let confidence = 0;
 
@@ -81,6 +64,18 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
             confidence += 25;
         }
 
+        if (matchedMarkers.includes("FARE_CALCULATION")) {
+            confidence += 15;
+        }
+
+        if (matchedMarkers.includes("CHECK_NUMBER")) {
+            confidence += 15;
+        }
+
+        if (matchedMarkers.includes("PASSENGER_NAME")) {
+            confidence += 10;
+        }
+
         confidence = Math.min(confidence, 100);
 
         return {
@@ -91,9 +86,7 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
     }
 
     parse(analysis: PdfAnalysisResult, detection: PdfParserDetection): ParsedBusTicketDocument {
-        const lines = analysis.lines
-            .map((line) => this.cleanText(line))
-            .filter(Boolean);
+        const lines = analysis.lines.map((line) => this.cleanText(line)).filter(Boolean);
 
         const compactText = this.compact(analysis.normalizedText);
         const itineraryNumbers = this.extractItineraryNumbers(compactText);
@@ -108,15 +101,13 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const routeTable = this.extractRouteTable(lines, compactText);
         const routeName = routeTable.routeName ?? this.findBestRouteName(lines);
         const routeCities = this.splitRoute(routeName);
+        const busTicketTrip = this.isBusTicketPage(compactText) ? this.extractBusTicketTripData(lines, compactText, routeCities.departureCity) : undefined;
         const itineraryPurchaseDateTime = this.findDateTimeAfterMarker(lines, /Дата покупки/i, 12);
         const allDateTimes = this.extractDateTimes(compactText);
         const carrierSaleDateTime = this.findAlternativePurchaseDateTime(allDateTimes, itineraryPurchaseDateTime);
-
-        const departureDateTime = this.findDateTimeAfterMarker(lines, /^Отправление$/i, 40) ??
-            this.findDepartureDateTime(allDateTimes, itineraryPurchaseDateTime, carrierSaleDateTime);
-
-        const arrivalDate = this.extractArrivalDate(lines, compactText, departureDateTime, itineraryPurchaseDateTime);
-        const arrivalTime = this.extractArrivalTime(lines, compactText, departureDateTime, itineraryPurchaseDateTime, carrierSaleDateTime);
+        const departureDateTime = busTicketTrip?.departure ?? this.findDateTimeAfterMarker(lines, /^Отправление$/i, 40) ?? this.findDepartureDateTime(allDateTimes, itineraryPurchaseDateTime, carrierSaleDateTime);
+        const arrivalDate = busTicketTrip?.arrival?.date ?? this.extractArrivalDate(lines, compactText, departureDateTime, itineraryPurchaseDateTime);
+        const arrivalTime = busTicketTrip?.arrival?.time ?? this.extractArrivalTime(lines, compactText, departureDateTime, itineraryPurchaseDateTime, carrierSaleDateTime);
         const carrierName = this.findFullNameAfterMarker(lines, /ПЕРЕВОЗЧИК|CARRIER/i);
         const ticketType = this.findValueAfterMarker(lines, /^Тип билета$/i, (value) => /^(Полный|Детский|Льготный)$/i.test(value), 10);
         const vehicleType = this.findValueAfterMarker(lines, /^Вид транспортного средства$/i, (value) => /\bавтобус\b/i.test(value), 10);
@@ -137,36 +128,23 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const paymentMethod = this.extractPaymentMethod(compactText);
         const warnings = this.createWarnings({ passengerName, itineraryTotal, carrierTicketTotal, itineraryPurchaseDateTime, carrierSaleDateTime });
 
-        this.validateCriticalFields({
-            carrierTicketNumber,
-            itineraryNumber:
-                itineraryNumbers?.itineraryNumber,
-            // passengerName,
-            routeName
-        });
+        this.validateCriticalFields({ carrierTicketNumber, itineraryNumber: itineraryNumbers?.itineraryNumber, routeName });
 
         const trip: BusTicketTrip = {
             routeName,
             tripNumber: routeTable.tripNumber,
-            seat: routeTable.seat,
-            platform: routeTable.platform,
+            seat: busTicketTrip?.seat ?? routeTable.seat,
+            platform: busTicketTrip?.platform ?? routeTable.platform,
 
             departure: {
                 city: routeCities.departureCity,
-                date: departureDateTime
-                    ? this.toIsoDate(
-                        departureDateTime.date
-                    )
-                    : undefined,
-                time:
-                    departureDateTime?.time
+                date: departureDateTime ? this.toIsoDate(departureDateTime.date) : undefined,
+                time: departureDateTime?.time
             },
 
             arrival: {
                 city: routeCities.arrivalCity,
-                date: arrivalDate
-                    ? this.toIsoDate(arrivalDate)
-                    : undefined,
+                date: arrivalDate ? this.toIsoDate(arrivalDate) : undefined,
                 time: arrivalTime
             },
 
@@ -208,15 +186,8 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
             identifiers: {
                 carrierTicketNumber,
-
-                itinerarySeries:
-                    itineraryNumbers
-                        ?.itinerarySeries,
-
-                itineraryNumber:
-                    itineraryNumbers
-                        ?.itineraryNumber,
-
+                itinerarySeries: itineraryNumbers?.itinerarySeries,
+                itineraryNumber: itineraryNumbers?.itineraryNumber,
                 controlNumber
             },
 
@@ -227,53 +198,39 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
             passenger: {
                 fullName: passengerName,
-
                 document: passengerDocument
                     ? {
                         type: "PASSPORT",
-                        number:
-                            passengerDocument,
+                        number: passengerDocument,
                         rawType: "Паспорт"
                     }
                     : undefined,
 
                 gender: personData.gender,
 
-                birthDate:
-                    personData.birthDate
-                        ? this.toIsoDate(
-                            personData.birthDate
-                        )
-                        : undefined,
+                birthDate: personData.birthDate
+                    ? this.toIsoDate(personData.birthDate)
+                    : undefined,
 
-                nationality:
-                    personData.nationality
+                nationality: personData.nationality
             },
 
             trip,
 
             purchase: {
-                agentIssuedAt:
-                    itineraryPurchaseDateTime
-                        ? {
-                            date: this.toIsoDate(
-                                itineraryPurchaseDateTime.date
-                            ),
-                            time:
-                                itineraryPurchaseDateTime.time
-                        }
-                        : undefined,
+                agentIssuedAt: itineraryPurchaseDateTime
+                    ? {
+                        date: this.toIsoDate(itineraryPurchaseDateTime.date),
+                        time: itineraryPurchaseDateTime.time
+                    }
+                    : undefined,
 
-                carrierSaleAt:
-                    carrierSaleDateTime
-                        ? {
-                            date: this.toIsoDate(
-                                carrierSaleDateTime.date
-                            ),
-                            time:
-                                carrierSaleDateTime.time
-                        }
-                        : undefined,
+                carrierSaleAt: carrierSaleDateTime
+                    ? {
+                        date: this.toIsoDate(carrierSaleDateTime.date),
+                        time: carrierSaleDateTime.time
+                    }
+                    : undefined,
 
                 paymentMethod
             },
@@ -282,59 +239,38 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
                 currency,
                 baseFare,
 
-                total:
-                    carrierTicketTotal ??
-                    itineraryTotal,
-
+                total: carrierTicketTotal ?? itineraryTotal,
                 totalSource:
                     carrierTicketTotal !== undefined &&
                         itineraryTotal !== undefined &&
-                        carrierTicketTotal >
-                        itineraryTotal
+                        carrierTicketTotal > itineraryTotal
                         ? "CARRIER_TICKET"
-                        : itineraryTotal !== undefined
-                            ? "ITINERARY_RECEIPT"
-                            : "UNKNOWN",
+                        : itineraryTotal !== undefined ? "ITINERARY_RECEIPT" : "UNKNOWN",
 
-                itineraryReceiptTotal:
-                    itineraryTotal,
+                itineraryReceiptTotal: itineraryTotal,
 
-                components:
-                    fareComponents.map(
-                        (component) => ({
-                            ...component,
-                            currency:
-                                component.currency ||
-                                currency ||
-                                "RUB"
-                        })
-                    )
+                components: fareComponents.map((component) => ({
+                    ...component,
+                    currency:
+                        component.currency ||
+                        currency ||
+                        "RUB"
+                })
+                )
             },
 
             warnings
         };
     }
 
-    private addMarker(
-        result: string[],
-        text: string,
-        expression: RegExp,
-        marker: string
-    ): void {
+    private addMarker(result: string[], text: string, expression: RegExp, marker: string): void {
         if (expression.test(text)) {
             result.push(marker);
         }
     }
 
-    private extractItineraryNumbers(
-        text: string
-    ): {
-        itinerarySeries: string;
-        itineraryNumber: string;
-    } | undefined {
-        const match = text.match(
-            /\b(\d{8,12})\s*\/\s*(\d{5,10})\b/
-        );
+    private extractItineraryNumbers(text: string): { itinerarySeries: string; itineraryNumber: string; } | undefined {
+        const match = text.match(/\b(\d{8,12})\s*\/\s*(\d{5,10})\b/);
 
         if (!match) {
             return undefined;
@@ -346,18 +282,8 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         };
     }
 
-    private extractControlNumber(
-        text: string,
-        itineraryNumbers:
-            | {
-                itinerarySeries: string;
-                itineraryNumber: string;
-            }
-            | undefined
-    ): string | undefined {
-        const match = text.match(
-            /КОНТРОЛЬНЫЙ НОМЕР\s*\/\s*CHECK NUMBER[\s\S]{0,150}?(\d{8,12})\s+(\d{5,10})/i
-        );
+    private extractControlNumber(text: string, itineraryNumbers: | { itinerarySeries: string; itineraryNumber: string; } | undefined): string | undefined {
+        const match = text.match(/КОНТРОЛЬНЫЙ НОМЕР\s*\/\s*CHECK NUMBER[\s\S]{0,150}?(\d{8,12})\s+(\d{5,10})/i);
 
         if (match) {
             return `${match[1]} ${match[2]}`;
@@ -367,18 +293,11 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
             return undefined;
         }
 
-        return (
-            `${itineraryNumbers.itinerarySeries} ` +
-            itineraryNumbers.itineraryNumber
-        );
+        return (`${itineraryNumbers.itinerarySeries} ` + itineraryNumbers.itineraryNumber);
     }
 
-    private extractPassport(
-        text: string
-    ): string | undefined {
-        const match = text.match(
-            /Паспорт\s+(\d{4})\s*(\d{6})/i
-        );
+    private extractPassport(text: string): string | undefined {
+        const match = text.match(/Паспорт\s+(\d{4})\s*(\d{6})/i);
 
         if (!match) {
             return undefined;
@@ -387,16 +306,7 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         return `${match[1]}${match[2]}`;
     }
 
-    private extractPersonData(
-        text: string
-    ): {
-        gender:
-        | "MALE"
-        | "FEMALE"
-        | "UNKNOWN";
-        birthDate?: string;
-        nationality?: string;
-    } {
+    private extractPersonData(text: string): { gender: | "MALE" | "FEMALE" | "UNKNOWN"; birthDate?: string; nationality?: string; } {
         const match = text.match(/(?:^|[^А-Яа-яЁё])(Мужской|Женский)\s+(\d{2}\.\d{2}\.\d{4})\s+([А-Яа-яЁё-]{2,40})(?=$|[^А-Яа-яЁё])/iu);
 
         if (!match) {
@@ -406,81 +316,35 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
 
         return {
-            gender:
-                match[1].toLowerCase() ===
-                    "мужской"
-                    ? "MALE"
-                    : "FEMALE",
-
+            gender: match[1].toLowerCase() === "мужской" ? "MALE" : "FEMALE",
             birthDate: match[2],
-            nationality:
-                this.normalizeNationality(
-                    match[3]
-                )
+            nationality: this.normalizeNationality(match[3])
         };
     }
 
-    private extractRouteTable(
-        lines: string[],
-        compactText: string
-    ): RouteTableData {
-        const rowMatch = compactText.match(
-            /Место\s+Маршрут\s+Номер\s+Платформа\s+(\d+)\s+(.{3,150}?)\s+(\d{1,8})\s+(\d{1,4})\s+Отправление/i
-        );
+    private extractRouteTable(lines: string[], compactText: string): RouteTableData {
+        const rowMatch = compactText.match(/Место\s+Маршрут\s+Номер\s+Платформа\s+(\d+)\s+(.{3,150}?)\s+(\d{1,8})\s+(\d{1,4})\s+Отправление/i);
 
         if (rowMatch) {
             return {
                 seat: rowMatch[1],
-                routeName:
-                    this.cleanRouteName(
-                        rowMatch[2]
-                    ),
+                routeName: this.cleanRouteName(rowMatch[2]),
                 tripNumber: rowMatch[3],
                 platform: rowMatch[4]
             };
         }
 
-        const section = this.extractLinesSection(
-            lines,
-            /Информация о рейсе/i,
-            /Информация о платеже/i
-        );
-
-        const seat =
-            this.findIntegerAfterExactMarker(
-                section,
-                /^Место$/i,
-                3
-            );
-
-        const numberIndex =
-            section.findIndex(
-                (line) => /^Номер$/i.test(line)
-            );
-
-        const platformIndex =
-            section.findIndex(
-                (line) =>
-                    /^Платформа$/i.test(line)
-            );
+        const section = this.extractLinesSection(lines, /Информация о рейсе/i, /Информация о платеже/i);
+        const seat = this.findIntegerAfterExactMarker(section, /^Место$/i, 3);
+        const numberIndex = section.findIndex((line) => /^Номер$/i.test(line));
+        const platformIndex = section.findIndex((line) => /^Платформа$/i.test(line));
 
         let tripNumber: string | undefined;
         let platform: string | undefined;
 
-        if (
-            numberIndex >= 0 &&
-            platformIndex >= 0
-        ) {
-            const values = section
-                .slice(
-                    Math.max(
-                        numberIndex,
-                        platformIndex
-                    ) + 1
-                )
-                .filter(
-                    (line) => /^\d+$/.test(line)
-                );
+        if (numberIndex >= 0 && platformIndex >= 0) {
+            const values = section.slice(Math.max(numberIndex, platformIndex) + 1)
+                .filter((line) => /^\d+$/.test(line));
 
             tripNumber = values[0];
             platform = values[1];
@@ -493,71 +357,36 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         };
     }
 
-    private findBestRouteName(
-        lines: string[]
-    ): string | undefined {
-        const candidates =
-            new Map<string, number>();
+    private findBestRouteName(lines: string[]): string | undefined {
+        const candidates = new Map<string, number>();
 
         for (const sourceLine of lines) {
-            const line = sourceLine
-                .replace(/^\d+\s+/, "")
-                .replace(
-                    /\s+\d+\s+\d+$/,
-                    ""
-                )
-                .trim();
+            const line = sourceLine.replace(/^\d+\s+/, "").replace(/\s+\d+\s+\d+$/, "").trim();
 
-            const match = line.match(
-                /^([\p{L}][\p{L}\s.'-]{1,80})\s+-\s+([\p{L}][\p{L}\s.'-]{1,120})$/u
-            );
+            const match = line.match(/^([\p{L}][\p{L}\s.'-]{1,80})\s+-\s+([\p{L}][\p{L}\s.'-]{1,120})$/u);
 
             if (!match) {
                 continue;
             }
 
-            const candidate =
-                this.cleanRouteName(
-                    `${match[1]} - ${match[2]}`
-                );
+            const candidate = this.cleanRouteName(`${match[1]} - ${match[2]}`);
 
-            if (
-                /Автовокзал|улица|дом\s+\d+/i.test(
-                    candidate
-                )
-            ) {
+            if (/Автовокзал|улица|дом\s+\d+/i.test(candidate)) {
                 continue;
             }
 
-            candidates.set(
-                candidate,
-                (candidates.get(candidate) ?? 0) + 1
-            );
+            candidates.set(candidate, (candidates.get(candidate) ?? 0) + 1);
         }
 
-        return [...candidates.entries()]
-            .sort(
-                ([firstName, firstCount],
-                    [secondName, secondCount]) =>
-                    secondCount - firstCount ||
-                    firstName.length -
-                    secondName.length
-            )[0]?.[0];
+        return [...candidates.entries()].sort(([firstName, firstCount], [secondName, secondCount]) => secondCount - firstCount || firstName.length - secondName.length)[0]?.[0];
     }
 
-    private splitRoute(
-        routeName: string | undefined
-    ): {
-        departureCity?: string;
-        arrivalCity?: string;
-    } {
+    private splitRoute(routeName: string | undefined): { departureCity?: string; arrivalCity?: string; } {
         if (!routeName) {
             return {};
         }
 
-        const parts = routeName.split(
-            /\s+-\s+/
-        );
+        const parts = routeName.split(/\s+-\s+/);
 
         if (parts.length < 2) {
             return {};
@@ -572,84 +401,36 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         };
     }
 
-    private findAlternativePurchaseDateTime(
-        allDateTimes: ExtractedDateTime[],
-        primary:
-            | ExtractedDateTime
-            | undefined
-    ): ExtractedDateTime | undefined {
+    private findAlternativePurchaseDateTime(allDateTimes: ExtractedDateTime[], primary: | ExtractedDateTime | undefined): ExtractedDateTime | undefined {
         if (!primary) {
             return undefined;
         }
 
-        return allDateTimes.find(
-            (value) =>
-                value.date === primary.date &&
-                value.time !== primary.time
-        );
+        return allDateTimes.find((value) => value.date === primary.date && value.time !== primary.time);
     }
 
-    private findDepartureDateTime(
-        allDateTimes: ExtractedDateTime[],
-        purchase:
-            | ExtractedDateTime
-            | undefined,
-        carrierSale:
-            | ExtractedDateTime
-            | undefined
-    ): ExtractedDateTime | undefined {
+    private findDepartureDateTime(allDateTimes: ExtractedDateTime[], purchase: | ExtractedDateTime | undefined, carrierSale: | ExtractedDateTime | undefined): ExtractedDateTime | undefined {
         const excluded = new Set<string>();
 
         if (purchase) {
-            excluded.add(
-                `${purchase.date} ${purchase.time}`
-            );
+            excluded.add(`${purchase.date} ${purchase.time}`);
         }
 
         if (carrierSale) {
-            excluded.add(
-                `${carrierSale.date} ${carrierSale.time}`
-            );
+            excluded.add(`${carrierSale.date} ${carrierSale.time}`);
         }
 
         const candidates = allDateTimes
-            .filter(
-                (value) =>
-                    !excluded.has(
-                        `${value.date} ${value.time}`
-                    )
-            )
-            .sort(
-                (first, second) =>
-                    this.dateTimeKey(first) -
-                    this.dateTimeKey(second)
-            );
+            .filter((value) => !excluded.has(`${value.date} ${value.time}`))
+            .sort((first, second) => this.dateTimeKey(first) - this.dateTimeKey(second));
 
         return candidates[0];
     }
 
-    private extractArrivalDate(
-        lines: string[],
-        compactText: string,
-        departure:
-            | ExtractedDateTime
-            | undefined,
-        purchase:
-            | ExtractedDateTime
-            | undefined
-    ): string | undefined {
-        const markerDate =
-            this.findDateAfterMarker(
-                lines,
-                /ПРИБЫТИЕ|ARRIVAL/i,
-                25
-            );
+    private extractArrivalDate(lines: string[], compactText: string, departure: | ExtractedDateTime | undefined, purchase: | ExtractedDateTime | undefined): string | undefined {
+        const markerDate = this.findDateAfterMarker(lines, /ПРИБЫТИЕ|ARRIVAL/i, 25);
 
-        if (
-            markerDate &&
-            markerDate !== departure?.date &&
-            markerDate !== purchase?.date
-        ) {
+        if (markerDate && markerDate !== departure?.date && markerDate !== purchase?.date) {
             return markerDate;
         }
 
@@ -658,66 +439,22 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
 
         return this.extractDates(compactText)
-            .filter(
-                (date) =>
-                    this.dateKey(date) >
-                    this.dateKey(
-                        departure.date
-                    )
-            )
-            .sort(
-                (first, second) =>
-                    this.dateKey(first) -
-                    this.dateKey(second)
-            )[0];
+            .filter((date) => this.dateKey(date) > this.dateKey(departure.date))
+            .sort((first, second) => this.dateKey(first) - this.dateKey(second))[0];
     }
 
-    private extractArrivalTime(
-        lines: string[],
-        compactText: string,
-        departure:
-            | ExtractedDateTime
-            | undefined,
-        purchase:
-            | ExtractedDateTime
-            | undefined,
-        carrierSale:
-            | ExtractedDateTime
-            | undefined
-    ): string | undefined {
-        const excludedTimes = new Set(
-            [
-                departure?.time,
-                purchase?.time,
-                carrierSale?.time
-            ].filter(
-                (value): value is string =>
-                    Boolean(value)
-            )
-        );
+    private extractArrivalTime(lines: string[], compactText: string, departure: | ExtractedDateTime | undefined, purchase: | ExtractedDateTime | undefined, carrierSale: | ExtractedDateTime | undefined): string | undefined {
+        const excludedTimes = new Set([departure?.time, purchase?.time, carrierSale?.time].filter((value): value is string => Boolean(value)));
 
-        const markerTimes =
-            this.findTimesNearMarker(
-                lines,
-                /ПРИБЫТИЕ|ARRIVAL/i,
-                30
-            );
+        const markerTimes = this.findTimesNearMarker(lines, /ПРИБЫТИЕ|ARRIVAL/i, 30);
 
-        const markerCandidate =
-            markerTimes.find(
-                (time) =>
-                    !excludedTimes.has(time)
-            );
+        const markerCandidate = markerTimes.find((time) => !excludedTimes.has(time));
 
         if (markerCandidate) {
             return markerCandidate;
         }
 
-        return this.extractTimes(compactText)
-            .find(
-                (time) =>
-                    !excludedTimes.has(time)
-            );
+        return this.extractTimes(compactText).find((time) => !excludedTimes.has(time));
     }
 
     private extractFareComponents(compactText: string): BusTicketPriceComponent[] {
@@ -728,18 +465,11 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
 
         const endMarker = compactText.slice(start).search(/ПОЛ\s*\/\s*GENDER/i);
-
         const end = endMarker >= 0 ? start + endMarker : Math.min(compactText.length, start + 1200);
-
         const block = compactText.slice(start, end);
-
-        const codes = ["ТАРИФ", "КСБ", "ИНФ"]
-            .filter((code) => new RegExp(`(?:^|\\s)${code}(?=\\s|$)`, "i").test(block));
-
+        const codes = ["ТАРИФ", "КСБ", "ИНФ"].filter((code) => new RegExp(`(?:^|\\s)${code}(?=\\s|$)`, "i").test(block));
         const amounts = this.extractMoneyValues(block);
-
-        const uniqueAmounts = amounts
-            .filter((amount, index) => amounts.indexOf(amount) === index);
+        const uniqueAmounts = amounts.filter((amount, index) => amounts.indexOf(amount) === index);
 
         return codes
             .map((code, index) => {
@@ -788,79 +518,34 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         return "UNKNOWN";
     }
 
-    private createWarnings(data: {
-        passengerName?: string; itineraryTotal?: number; carrierTicketTotal?: number; itineraryPurchaseDateTime?: ExtractedDateTime; carrierSaleDateTime?: ExtractedDateTime;
-    }): Array<{
-        code: string;
-        message: string;
-    }> {
-        const warnings: Array<{
-            code: string;
-            message: string;
-        }> = [];
+    private createWarnings(data: { passengerName?: string; itineraryTotal?: number; carrierTicketTotal?: number; itineraryPurchaseDateTime?: ExtractedDateTime; carrierSaleDateTime?: ExtractedDateTime; }): Array<{ code: string; message: string; }> {
+        const warnings: Array<{ code: string; message: string; }> = [];
 
         if (!data.passengerName) {
-            warnings.push({
-                code: "PASSENGER_NAME_NOT_FOUND",
-                message: "Не удалось извлечь ФИО пассажира"
-            });
+            warnings.push({ code: "PASSENGER_NAME_NOT_FOUND", message: "Не удалось извлечь ФИО пассажира" });
         }
 
-        if (
-            data.itineraryTotal !== undefined &&
-            data.carrierTicketTotal !== undefined &&
-            Math.abs(
-                data.itineraryTotal -
-                data.carrierTicketTotal
-            ) > 0.01
-        ) {
+        if (data.itineraryTotal !== undefined && data.carrierTicketTotal !== undefined && Math.abs(data.itineraryTotal - data.carrierTicketTotal) > 0.01) {
             warnings.push({
                 code: "DECLARED_TOTALS_DIFFER",
-
-                message:
-                    `Маршрутная квитанция содержит сумму ` +
-                    `${data.itineraryTotal.toFixed(2)}, ` +
-                    `проездной документ — ` +
-                    `${data.carrierTicketTotal.toFixed(2)}`
+                message: `Маршрутная квитанция содержит сумму ` + `${data.itineraryTotal.toFixed(2)}, ` + `проездной документ — ` + `${data.carrierTicketTotal.toFixed(2)}`
             });
         }
 
-        if (
-            data.itineraryPurchaseDateTime &&
-            data.carrierSaleDateTime &&
-            (
-                data.itineraryPurchaseDateTime.date !==
-                data.carrierSaleDateTime.date ||
-                data.itineraryPurchaseDateTime.time !==
-                data.carrierSaleDateTime.time
-            )
-        ) {
+        if (data.itineraryPurchaseDateTime && data.carrierSaleDateTime && (data.itineraryPurchaseDateTime.date !== data.carrierSaleDateTime.date || data.itineraryPurchaseDateTime.time !== data.carrierSaleDateTime.time)) {
             warnings.push({
                 code: "PURCHASE_TIMES_DIFFER",
-
-                message:
-                    `В документах указано время покупки ` +
-                    `${data.itineraryPurchaseDateTime.time} ` +
-                    `и время продажи ` +
-                    `${data.carrierSaleDateTime.time}`
+                message: `В документах указано время покупки ` + `${data.itineraryPurchaseDateTime.time} ` + `и время продажи ` + `${data.carrierSaleDateTime.time}`
             });
         }
 
         return warnings;
     }
 
-    private validateCriticalFields(data: {
-        carrierTicketNumber?: string;
-        itineraryNumber?: string;
-        // passengerName?: string;
-        routeName?: string;
-    }): void {
+    private validateCriticalFields(data: { carrierTicketNumber?: string; itineraryNumber?: string; routeName?: string; }): void {
         const missingFields: string[] = [];
 
-        if (
-            !data.carrierTicketNumber &&
-            !data.itineraryNumber
-        ) {
+        if (!data.carrierTicketNumber && !data.itineraryNumber) {
             missingFields.push("ticket number");
         }
 
@@ -875,24 +560,12 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
 
         if (missingFields.length > 0) {
-            throw new Error(
-                `Busfor PDF was detected, but critical fields ` +
-                `could not be extracted: ` +
-                missingFields.join(", ")
-            );
+            throw new Error(`Busfor PDF was detected, but critical fields ` + `could not be extracted: ` + missingFields.join(", "));
         }
     }
 
-    private findFullNameAfterMarker(
-        lines: string[],
-        marker: RegExp,
-        maxDistance = 20
-    ): string | undefined {
-        for (
-            let markerIndex = 0;
-            markerIndex < lines.length;
-            markerIndex++
-        ) {
+    private findFullNameAfterMarker(lines: string[], marker: RegExp, maxDistance = 20): string | undefined {
+        for (let markerIndex = 0; markerIndex < lines.length; markerIndex++) {
             /*
              * Сбрасываем lastIndex на случай, если позднее
              * сюда будет передан RegExp с флагом g.
@@ -909,37 +582,22 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
              */
             marker.lastIndex = 0;
 
-            const lineWithoutMarker = lines[markerIndex]
-                .replace(marker, " ")
-                .trim();
+            const lineWithoutMarker = lines[markerIndex].replace(marker, " ").trim();
 
-            const inlineName =
-                this.extractRussianFullName(
-                    lineWithoutMarker
-                );
+            const inlineName = this.extractRussianFullName(lineWithoutMarker);
 
             if (inlineName) {
                 return inlineName;
             }
 
-            const end = Math.min(
-                lines.length,
-                markerIndex + maxDistance + 1
-            );
+            const end = Math.min(lines.length, markerIndex + maxDistance + 1);
 
             /*
              * Начинаем со следующей строки, чтобы заголовок
              * "ФАМИЛИЯ ПАССАЖИРА" не был принят за имя.
              */
-            for (
-                let index = markerIndex + 1;
-                index < end;
-                index++
-            ) {
-                const passengerName =
-                    this.extractRussianFullName(
-                        lines[index]
-                    );
+            for (let index = markerIndex + 1; index < end; index++) {
+                const passengerName = this.extractRussianFullName(lines[index]);
 
                 if (passengerName) {
                     return passengerName;
@@ -1025,11 +683,7 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         return undefined;
     }
 
-    private findTimesNearMarker(
-        lines: string[],
-        marker: RegExp,
-        maxDistance: number
-    ): string[] {
+    private findTimesNearMarker(lines: string[], marker: RegExp, maxDistance: number): string[] {
         const result: string[] = [];
 
         for (let markerIndex = 0; markerIndex < lines.length; markerIndex++) {
@@ -1038,7 +692,6 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
             }
 
             const start = Math.max(0, markerIndex - 5);
-
             const end = Math.min(lines.length, markerIndex + maxDistance + 1);
 
             for (let index = start; index < end; index++) {
@@ -1151,21 +804,14 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
     }
 
     private cleanRouteName(value: string): string {
-        return value
-            .replace(/\s+/g, " ")
-            .trim();
+        return value.replace(/\s+/g, " ").trim();
     }
 
     private cleanText(value: string): string {
-        return value
-            .replace(/\u00A0/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
+        return value.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
     }
 
-    private compact(
-        value: string
-    ): string {
+    private compact(value: string): string {
         return this.cleanText(value);
     }
 
@@ -1193,4 +839,120 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const minutes = timeMatch ? Number(timeMatch[1]) * 60 + Number(timeMatch[2]) : 0;
         return (this.dateKey(value.date) * 24 * 60 + minutes);
     }
+
+    selectPageNumbers(analysis: PdfAnalysisResult): number[] | undefined {
+        const pages = analysis.pages;
+
+        /*
+         * Специальное правило только для конкретного
+         * двухстраничного шаблона Busfor.
+         *
+         * Все остальные PDF продолжают обрабатываться
+         * стандартным способом: страница = билет.
+         */
+        if (!Array.isArray(pages) || pages.length !== 2) {
+            return undefined;
+        }
+
+        const firstPage = pages[0];
+        const secondPage = pages[1];
+
+        if (!this.isItineraryReceiptPage(firstPage.normalizedText)) {
+            return undefined;
+        }
+
+        if (!this.isBusTicketPage(secondPage.normalizedText)) {
+            return undefined;
+        }
+
+        const itineraryNumbers = this.extractItineraryNumbers(this.compact(firstPage.normalizedText));
+
+        if (!itineraryNumbers) {
+            return undefined;
+        }
+
+        const secondPageText = this.compact(secondPage.normalizedText);
+        const sameTicket = new RegExp(`\\b${itineraryNumbers.itinerarySeries}\\s+` + `${itineraryNumbers.itineraryNumber}\\b`).test(secondPageText);
+
+        if (!sameTicket) {
+            return undefined;
+        }
+
+        /*
+         * Это именно нужный двухстраничный Busfor:
+         * страницу 1 игнорируем,
+         * страницу 2 парсим и сохраняем.
+         */
+        return [secondPage.pageNumber];
+    }
+
+    private isItineraryReceiptPage(text: string): boolean {
+        return (/Маршрутная квитанция электронного билета/i.test(text) && /E-Ticket itinerary receipt/i.test(text) && /\bBUSFOR(?:\.RU)?\b/i.test(text));
+    }
+
+    private isBusTicketPage(text: string): boolean {
+        return (/ПРОЕЗДНОЙ ДОКУМЕНТ НА АВТОБУС\s*\/\s*BUS TICKET/i.test(text) && /РАСЧЕТ СТОИМОСТИ\s*\/\s*FARE CALCULATION/i.test(text) && /КОНТРОЛЬНЫЙ НОМЕР\s*\/\s*CHECK NUMBER/i.test(text));
+    }
+
+    private extractBusTicketTripData(lines: string[], compactText: string, departureCity: string | undefined): BusTicketTripData {
+
+        const routeTimes = this.findTimesNearMarker(lines, /^ПРИБЫТИЕ\s*\/\s*ARRIVAL$/i, 10);
+        const departureDate = this.findDateOnLineWithText(lines, departureCity);
+        const arrivalDate = this.findDateBeforeMarker(lines, /^ПРИБЫТИЕ\s*\/\s*ARRIVAL$/i, 15);
+        const seat = this.findIntegerAfterExactMarker(lines, /^ТАРИФ\s+РЕЙС$/i, 3);
+        const platform = this.findIntegerAfterExactMarker(lines, /^ПЛАТФОРМА\s*\/\s*PLATFORM$/i, 10);
+
+        return {
+            seat,
+            platform,
+            departure: departureDate && routeTimes[0] ? { date: departureDate, time: routeTimes[0] } : undefined,
+            arrival: arrivalDate && routeTimes[1] ? { date: arrivalDate, time: routeTimes[1] } : undefined
+        };
+    }
+
+    private findDateOnLineWithText(lines: string[], searchText: string | undefined): string | undefined {
+        if (!searchText) {
+            return undefined;
+        }
+
+        const normalizedSearchText = searchText.toLowerCase();
+
+        for (const line of lines) {
+            if (!line.toLowerCase().includes(normalizedSearchText)) {
+                continue;
+            }
+
+            const match = line.match(/\b\d{2}\.\d{2}\.\d{4}\b/);
+
+            if (match) {
+                return match[0];
+            }
+        }
+
+        return undefined;
+    }
+
+    private findDateBeforeMarker(lines: string[], marker: RegExp, maxDistance: number): string | undefined {
+        const markerIndex = lines.findIndex((line) => {
+            marker.lastIndex = 0;
+            return marker.test(line);
+        });
+
+        if (markerIndex < 0) {
+            return undefined;
+        }
+
+        const startIndex = Math.max(0, markerIndex - maxDistance);
+
+        for (let index = markerIndex - 1; index >= startIndex; index--) {
+            const match = lines[index].match(/\b\d{2}\.\d{2}\.\d{4}\b/);
+
+            if (match) {
+                return match[0];
+            }
+        }
+
+        return undefined;
+    }
+
 }

@@ -1,5 +1,4 @@
 import { PDFParse } from "pdf-parse";
-
 import { PdfAnalysisResult, PdfDocumentMetadata, PdfMailAttachment, PdfPageAnalysisResult } from "./types/PdfTypes.js";
 
 export class PdfAnalysisService {
@@ -23,23 +22,17 @@ export class PdfAnalysisService {
 
             const pages = this.mapPages(textResult.pages);
             const rawText = pages.map((page) => page.rawText).join("\n\n");
-            const normalizedText = pages.map((page) => page.normalizedText)
-                .filter(Boolean)
-                .join("\n\n");
+            const normalizedText = pages.map((page) => page.normalizedText)                .filter(Boolean)                .join("\n\n");
 
             if (!normalizedText) {
                 throw new Error(`No text could be extracted from PDF ` + `"${attachment.filename}". ` + `The document may contain scanned images only`);
             }
 
             return {
-                filename:
-                    attachment.filename,
-                contentType:
-                    attachment.contentType,
-                checksum:
-                    attachment.checksum,
-                size:
-                    attachment.size,
+                filename:                    attachment.filename,
+                contentType:                    attachment.contentType,
+                checksum:                    attachment.checksum,
+                size:                    attachment.size,
 
                 /*
                  * infoResult.total — количество страниц
@@ -47,29 +40,17 @@ export class PdfAnalysisService {
                  *
                  * textResult.total используем как fallback.
                  */
-                pageCount:
-                    infoResult.total ??
-                    textResult.total ??
-                    pages.length,
-
+                pageCount:                    infoResult.total ??                    textResult.total ??                    pages.length,
                 rawText,
                 normalizedText,
-
-                lines:
-                    this.extractLines(
-                        normalizedText
-                    ),
-
+                lines:                    this.extractLines(                        normalizedText                    ),
                 pages,
 
                 /*
                  * В установленной версии pdf-parse
                  * используется свойство info.
                  */
-                metadata:
-                    this.mapMetadata(
-                        infoResult.info
-                    )
+                metadata:                    this.mapMetadata(                        infoResult.info                    )
             };
         } catch (error: unknown) {
             throw new Error(`Could not analyze PDF ` + `"${attachment.filename}": ` + this.getErrorMessage(error));

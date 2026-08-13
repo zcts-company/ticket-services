@@ -1,31 +1,14 @@
-import {
-    ParsedBusTicketDocument
-} from "../types/BusTicketTypes.js";
+import { ParsedBusTicketDocument } from "../types/BusTicketTypes.js";
+import { PdfAnalysisResult } from "../types/PdfTypes.js";
+import { BusTicketPdfParser, PdfParserDetection } from "./interface/BusTicketPdfParser.js";
+import { BaseRegexBusTicketPdfParser, ParsedRouteData, ParsedTripPoints } from "./BaseRegexBusTicketPdfParser.js";
 
-import { PdfAnalysisResult } from
-    "../types/PdfTypes.js";
-
-import {
-    BusTicketPdfParser,
-    PdfParserDetection
-} from "./interface/BusTicketPdfParser.js";
-
-import {
-    BaseRegexBusTicketPdfParser,
-    ParsedRouteData,
-    ParsedTripPoints
-} from "./BaseRegexBusTicketPdfParser.js";
-
-export class FiveStarsPassengerBusTicketPdfParser
-    extends BaseRegexBusTicketPdfParser
-    implements BusTicketPdfParser {
+export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfParser implements BusTicketPdfParser {
 
     readonly id = "five-stars-passenger-v1";
     readonly version = "1.0.0";
 
-    detect(
-        analysis: PdfAnalysisResult
-    ): PdfParserDetection {
+    detect(analysis: PdfAnalysisResult): PdfParserDetection {
         const text = this.compact(
             analysis.normalizedText
         );
@@ -33,11 +16,7 @@ export class FiveStarsPassengerBusTicketPdfParser
         const matchedMarkers: string[] = [];
         let confidence = 0;
 
-        const add = (
-            expression: RegExp,
-            marker: string,
-            score: number
-        ): void => {
+        const add = (expression: RegExp, marker: string, score: number): void => {
             expression.lastIndex = 0;
 
             if (expression.test(text)) {

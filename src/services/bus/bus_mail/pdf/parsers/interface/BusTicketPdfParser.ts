@@ -16,12 +16,14 @@ export interface BusTicketPdfParser {
     readonly id: string;
     readonly version: string;
 
-    detect(
-        analysis: PdfAnalysisResult
-    ): PdfParserDetection;
-
-    parse(
-        analysis: PdfAnalysisResult,
-        detection: PdfParserDetection
-    ): ParsedBusTicketDocument;
+    detect(analysis: PdfAnalysisResult): PdfParserDetection;
+    parse(analysis: PdfAnalysisResult, detection: PdfParserDetection): ParsedBusTicketDocument;
+    /**
+     * Позволяет конкретному парсеру выбрать страницы,
+     * которые должны рассматриваться как билеты.
+     *
+     * undefined — специального правила нет,
+     * обрабатываем все страницы как раньше.
+     */
+    selectPageNumbers?(analysis: PdfAnalysisResult): number[] | undefined;
 }

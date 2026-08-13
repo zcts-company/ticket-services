@@ -79,19 +79,21 @@ export class BusTicketPdfParserService {
      */
     parsePages(analysis: PdfAnalysisResult): ParsedBusTicketDocument[] {
         const pages = this.getPages(analysis);
+        const selectedPageNumbers = this.selectPageNumbers(analysis);
+        const pagesToParse = selectedPageNumbers
+            ? pages.filter((page) => selectedPageNumbers.includes(page.pageNumber))
+            : pages;
 
         const result: ParsedBusTicketDocument[] = [];
 
-        for (const page of pages) {
+        for (const page of pagesToParse) {
             if (!page.normalizedText.trim()) {
                 continue;
             }
-
             const pageAnalysis = this.createPageAnalysis(analysis, page);
 
             try {
                 const parsedDocument = this.parse(pageAnalysis);
-
                 result.push(parsedDocument);
             } catch (error: unknown) {
                 const errorMessage = this.getErrorMessage(error);
@@ -115,12 +117,9 @@ export class BusTicketPdfParserService {
         return [
             {
                 pageNumber: 1,
-                rawText:
-                    analysis.rawText,
-                normalizedText:
-                    analysis.normalizedText,
-                lines:
-                    analysis.lines
+                rawText: analysis.rawText,
+                normalizedText: analysis.normalizedText,
+                lines: analysis.lines
             }
         ];
     }
@@ -133,37 +132,26 @@ export class BusTicketPdfParserService {
      */
     private createPageAnalysis(documentAnalysis: PdfAnalysisResult, page: PdfPageAnalysisResult): PdfAnalysisResult {
         return {
-            filename:
-                documentAnalysis.filename,
-            contentType:
-                documentAnalysis.contentType,
-            checksum:
-                documentAnalysis.checksum,
-            size:
-                documentAnalysis.size,
+            filename: documentAnalysis.filename,
+            contentType: documentAnalysis.contentType,
+            checksum: documentAnalysis.checksum,
+            size: documentAnalysis.size,
             /**
              * Общее количество страниц исходного PDF.
              */
-            pageCount:
-                documentAnalysis.pageCount,
+            pageCount: documentAnalysis.pageCount,
             /**
              * Номер текущей страницы.
              */
-            pageNumber:
-                page.pageNumber,
-            rawText:
-                page.rawText,
-            normalizedText:
-                page.normalizedText,
-            lines:
-                page.lines,
+            pageNumber: page.pageNumber,
+            rawText: page.rawText,
+            normalizedText: page.normalizedText,
+            lines: page.lines,
             /**
              * Конкретный парсер видит только текущую страницу.
              */
             pages: [page],
-
-            metadata:
-                documentAnalysis.metadata
+            metadata: documentAnalysis.metadata
         };
     }
 
@@ -181,5 +169,21 @@ export class BusTicketPdfParserService {
         } catch {
             return "Unknown parser error";
         }
+    }
+
+    private selectPageNumbers(analysis: PdfAnalysisResult): number[] | undefined {
+        for (const parser of this.parsers) {
+            if (!parser.selectPageNumbers) {
+                continue;
+            }
+
+            const pageNumbers = parser.selectPageNumbers(analysis);
+
+            if (pageNumbers && pageNumbers.length > 0) {
+                return pageNumbers;
+            }
+        }
+
+        return undefined;
     }
 }

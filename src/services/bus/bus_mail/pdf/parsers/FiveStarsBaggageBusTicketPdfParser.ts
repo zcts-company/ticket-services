@@ -1,24 +1,9 @@
-import {
-    ParsedBusTicketDocument
-} from "../types/BusTicketTypes.js";
+import {    ParsedBusTicketDocument} from "../types/BusTicketTypes.js";
+import { PdfAnalysisResult } from    "../types/PdfTypes.js";
+import {    BusTicketPdfParser,    PdfParserDetection} from "./interface/BusTicketPdfParser.js";
+import {    BaseRegexBusTicketPdfParser,    ParsedRouteData,    ParsedTripPoints} from "./BaseRegexBusTicketPdfParser.js";
 
-import { PdfAnalysisResult } from
-    "../types/PdfTypes.js";
-
-import {
-    BusTicketPdfParser,
-    PdfParserDetection
-} from "./interface/BusTicketPdfParser.js";
-
-import {
-    BaseRegexBusTicketPdfParser,
-    ParsedRouteData,
-    ParsedTripPoints
-} from "./BaseRegexBusTicketPdfParser.js";
-
-export class FiveStarsBaggageBusTicketPdfParser
-    extends BaseRegexBusTicketPdfParser
-    implements BusTicketPdfParser {
+export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdfParser    implements BusTicketPdfParser {
 
     readonly id = "five-stars-baggage-v1";
     readonly version = "1.0.0";

@@ -1,10 +1,5 @@
-import {
-    BusTicketPaymentMethod,
-    BusTicketPriceComponent
-} from "../types/BusTicketTypes.js";
-
-import { PdfAnalysisResult } from
-    "../types/PdfTypes.js";
+import { BusTicketPaymentMethod, BusTicketPriceComponent } from "../types/BusTicketTypes.js";
+import { PdfAnalysisResult } from "../types/PdfTypes.js";
 
 export interface ParsedDateTime {
     date: string;
@@ -59,26 +54,14 @@ export abstract class BaseRegexBusTicketPdfParser {
         return this.compact(value);
     }
 
-    protected extractFirstGroup(
-        text: string,
-        expression: RegExp,
-        groupIndex = 1
-    ): string | undefined {
+    protected extractFirstGroup(text: string, expression: RegExp, groupIndex = 1): string | undefined {
         expression.lastIndex = 0;
-
         const value = text.match(expression)?.[groupIndex];
-
-        return value
-            ? this.clean(value)
-            : undefined;
+        return value ? this.clean(value) : undefined;
     }
 
-    protected extractDateTime(
-        text: string,
-        expression: RegExp
-    ): ParsedDateTime | undefined {
+    protected extractDateTime(text: string, expression: RegExp): ParsedDateTime | undefined {
         expression.lastIndex = 0;
-
         const match = text.match(expression);
 
         if (!match) {
@@ -92,55 +75,32 @@ export abstract class BaseRegexBusTicketPdfParser {
     }
 
     protected toIsoDate(value: string): string {
-        const match = value.match(
-            /^(\d{2})\.(\d{2})\.(\d{2}|\d{4})$/
-        );
+        const match = value.match(/^(\d{2})\.(\d{2})\.(\d{2}|\d{4})$/);
 
         if (!match) {
-            throw new Error(
-                `Unsupported date format: "${value}"`
-            );
+            throw new Error(`Unsupported date format: "${value}"`);
         }
 
-        const year = match[3].length === 2
-            ? `20${match[3]}`
-            : match[3];
-
+        const year = match[3].length === 2 ? `20${match[3]}` : match[3];
         return `${year}-${match[2]}-${match[1]}`;
     }
 
-    protected toMoney(
-        value: string | undefined
-    ): number | undefined {
+    protected toMoney(value: string | undefined): number | undefined {
         if (!value) {
             return undefined;
         }
 
-        const result = Number(
-            value
-                .replace(/[\s\u00A0]/g, "")
-                .replace(",", ".")
-        );
+        const result = Number(value.replace(/[\s\u00A0]/g, "").replace(",", "."));
 
-        return Number.isFinite(result)
-            ? result
-            : undefined;
+        return Number.isFinite(result) ? result : undefined;
     }
 
     protected extractMoneyValues(text: string): number[] {
         const textWithoutDates = text
-            .replace(
-                /\b\d{2}\.\d{2}\.\d{2,4}\b/g,
-                " "
-            )
-            .replace(
-                /\b\d{2}:\d{2}\b/g,
-                " "
-            );
+            .replace(/\b\d{2}\.\d{2}\.\d{2,4}\b/g, " ")
+            .replace(/\b\d{2}:\d{2}\b/g, " ");
 
-        const matches = textWithoutDates.match(
-            /(?<!\d)(?:\d{1,3}(?:[ \u00A0]\d{3})+|\d{1,9})[.,]\d{2}(?!\d)/g
-        ) ?? [];
+        const matches = textWithoutDates.match(/(?<!\d)(?:\d{1,3}(?:[ \u00A0]\d{3})+|\d{1,9})[.,]\d{2}(?!\d)/g) ?? [];
 
         return matches
             .map((value) => this.toMoney(value))
@@ -150,9 +110,7 @@ export abstract class BaseRegexBusTicketPdfParser {
             );
     }
 
-    protected mapPaymentMethod(
-        value: string | undefined
-    ): BusTicketPaymentMethod {
+    protected mapPaymentMethod(value: string | undefined): BusTicketPaymentMethod {
         if (!value) {
             return "UNKNOWN";
         }
@@ -176,12 +134,7 @@ export abstract class BaseRegexBusTicketPdfParser {
         return "UNKNOWN";
     }
 
-    protected splitRoute(
-        routeName: string | undefined
-    ): {
-        departureStation?: string;
-        arrivalStation?: string;
-    } {
+    protected splitRoute(routeName: string | undefined): { departureStation?: string; arrivalStation?: string; } {
         if (!routeName) {
             return {};
         }
@@ -196,57 +149,31 @@ export abstract class BaseRegexBusTicketPdfParser {
 
         return {
             departureStation: this.clean(parts[0]),
-            arrivalStation: this.clean(
-                parts.slice(1).join(" - ")
-            )
+            arrivalStation: this.clean(parts.slice(1).join(" - "))
         };
     }
 
     protected cleanRouteName(value: string): string {
-        return this.clean(value)
-            .replace(/\s+-\s+/g, " - ");
+        return this.clean(value).replace(/\s+-\s+/g, " - ");
     }
 
-    protected extractCityName(
-        station: string | undefined
-    ): string | undefined {
+    protected extractCityName(station: string | undefined): string | undefined {
         if (!station) {
             return undefined;
         }
 
-        return station
-            .replace(
-                /\s+(?:ЖД(?:\s*\([^)]*\))?|Автовокзал|АВ|Аэропорт).*$/iu,
-                ""
-            )
-            .trim() || undefined;
+        return station.replace(/\s+(?:ЖД(?:\s*\([^)]*\))?|Автовокзал|АВ|Аэропорт).*$/iu, "").trim() || undefined;
     }
 
-    protected splitStationAndAddress(
-        value: string | undefined,
-        expectedStation: string | undefined
-    ): {
-        station?: string;
-        address?: string;
-    } {
+    protected splitStationAndAddress(value: string | undefined, expectedStation: string | undefined): { station?: string; address?: string; } {
         if (!value) {
             return {};
         }
 
         const normalizedValue = this.clean(value);
-        const normalizedStation = expectedStation
-            ? this.clean(expectedStation)
-            : undefined;
+        const normalizedStation = expectedStation ? this.clean(expectedStation) : undefined;
 
-        if (
-            normalizedStation &&
-            normalizedValue
-                .toLocaleLowerCase("ru")
-                .startsWith(
-                    normalizedStation
-                        .toLocaleLowerCase("ru")
-                )
-        ) {
+        if (normalizedStation && normalizedValue.toLocaleLowerCase("ru").startsWith(normalizedStation.toLocaleLowerCase("ru"))) {
             const address = normalizedValue
                 .slice(normalizedStation.length)
                 .replace(/^[,\s]+/, "")
@@ -263,12 +190,8 @@ export abstract class BaseRegexBusTicketPdfParser {
 
         if (commaIndex > 0) {
             return {
-                station: this.clean(
-                    normalizedValue.slice(0, commaIndex)
-                ),
-                address: this.clean(
-                    normalizedValue.slice(commaIndex + 1)
-                ) || undefined
+                station: this.clean(normalizedValue.slice(0, commaIndex)),
+                address: this.clean(normalizedValue.slice(commaIndex + 1)) || undefined
             };
         }
 
@@ -277,48 +200,24 @@ export abstract class BaseRegexBusTicketPdfParser {
         };
     }
 
-    protected extractPassengerName(
-        passengerSection: string
-    ): string | undefined {
-        const match = passengerSection.match(
-            /(?:^|\s)([А-ЯЁ][А-Яа-яЁё-]+(?:\s+[А-ЯЁ][А-Яа-яЁё-]+){2})(?=\s+Паспорт\s+РФ)/u
-        );
-
-        return match?.[1]
-            ? this.clean(match[1])
-            : undefined;
+    protected extractPassengerName(passengerSection: string): string | undefined {
+        const match = passengerSection.match(/(?:^|\s)([А-ЯЁ][А-Яа-яЁё-]+(?:\s+[А-ЯЁ][А-Яа-яЁё-]+){2})(?=\s+Паспорт\s+РФ)/u);
+        return match?.[1] ? this.clean(match[1]) : undefined;
     }
 
-    protected extractPassportNumber(
-        passengerSection: string
-    ): string | undefined {
-        const match = passengerSection.match(
-            /\b(\d{4})[\s/]*(\d{6})\b/u
-        );
-
-        return match
-            ? `${match[1]}${match[2]}`
-            : undefined;
+    protected extractPassportNumber(passengerSection: string): string | undefined {
+        const match = passengerSection.match(/\b(\d{4})[\s/]*(\d{6})\b/u);
+        return match ? `${match[1]}${match[2]}` : undefined;
     }
 
-    protected buildPricing(
-        total: number | undefined,
-        commission = 0
-    ): {
-        baseFare?: number;
-        total?: number;
-        components: BusTicketPriceComponent[];
-    } {
+    protected buildPricing(total: number | undefined, commission = 0): { baseFare?: number; total?: number; components: BusTicketPriceComponent[]; } {
         if (total === undefined) {
             return {
                 components: []
             };
         }
 
-        const baseFare = Math.max(
-            0,
-            total - commission
-        );
+        const baseFare = Math.max(0, total - commission);
 
         const components: BusTicketPriceComponent[] = [
             {
@@ -341,19 +240,8 @@ export abstract class BaseRegexBusTicketPdfParser {
         };
     }
 
-    protected createWarnings(data: {
-        passengerName?: string;
-        routeName?: string;
-        departureDate?: string;
-        total?: number;
-    }): Array<{
-        code: string;
-        message: string;
-    }> {
-        const warnings: Array<{
-            code: string;
-            message: string;
-        }> = [];
+    protected createWarnings(data: { passengerName?: string; routeName?: string; departureDate?: string; total?: number; }): Array<{ code: string; message: string; }> {
+        const warnings: Array<{ code: string; message: string; }> = [];
 
         if (!data.passengerName) {
             warnings.push({
@@ -386,12 +274,7 @@ export abstract class BaseRegexBusTicketPdfParser {
         return warnings;
     }
 
-    protected validateCriticalFields(data: {
-        parserName: string;
-        receiptId?: string;
-        ticketNumber?: string;
-        routeName?: string;
-    }): void {
+    protected validateCriticalFields(data: { parserName: string; receiptId?: string; ticketNumber?: string; routeName?: string; }): void {
         const missingFields: string[] = [];
 
         if (!data.receiptId && !data.ticketNumber) {
@@ -403,10 +286,7 @@ export abstract class BaseRegexBusTicketPdfParser {
         }
 
         if (missingFields.length > 0) {
-            throw new Error(
-                `${data.parserName} PDF was detected, but critical fields ` +
-                `could not be extracted: ${missingFields.join(", ")}`
-            );
+            throw new Error(`${data.parserName} PDF was detected, but critical fields ` + `could not be extracted: ${missingFields.join(", ")}`);
         }
     }
 
@@ -421,11 +301,7 @@ export abstract class BaseRegexBusTicketPdfParser {
         };
     }
 
-    protected extractSection(
-        text: string,
-        startExpression: RegExp,
-        endExpression: RegExp
-    ): string {
+    protected extractSection(text: string, startExpression: RegExp, endExpression: RegExp): string {
         startExpression.lastIndex = 0;
         endExpression.lastIndex = 0;
 
@@ -435,14 +311,9 @@ export abstract class BaseRegexBusTicketPdfParser {
             return "";
         }
 
-        const rest = text.slice(
-            startMatch.index + startMatch[0].length
-        );
-
+        const rest = text.slice(startMatch.index + startMatch[0].length);
         const endMatch = endExpression.exec(rest);
 
-        return endMatch
-            ? rest.slice(0, endMatch.index)
-            : rest;
+        return endMatch ? rest.slice(0, endMatch.index) : rest;
     }
 }

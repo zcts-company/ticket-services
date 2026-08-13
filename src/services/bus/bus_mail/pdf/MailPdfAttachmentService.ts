@@ -1,5 +1,4 @@
 import { simpleParser } from "mailparser";
-
 import { PdfMailAttachment } from "./types/PdfTypes.js";
 
 export class MailPdfAttachmentService {
@@ -43,16 +42,10 @@ export class MailPdfAttachmentService {
 
             result.push({
                 filename,
-                contentType:
-                    attachment.contentType ||
-                    "application/pdf",
-                contentDisposition:
-                    attachment.contentDisposition,
-                checksum:
-                    attachment.checksum,
-                size:
-                    attachment.size ??
-                    content.length,
+                contentType:                    attachment.contentType ||                    "application/pdf",
+                contentDisposition:                    attachment.contentDisposition,                
+                checksum:                    attachment.checksum,
+                size:                    attachment.size ??                    content.length,
                 content
             });
         }
@@ -62,9 +55,7 @@ export class MailPdfAttachmentService {
 
     private looksLikePdf(filename: string | undefined, contentType: string | undefined, content: ArrayLike<number>): boolean {
         const normalizedFilename = filename?.trim().toLowerCase() ?? "";
-
         const normalizedContentType = contentType?.trim().toLowerCase() ?? "";
-
         return (normalizedFilename.endsWith(".pdf") || normalizedContentType === "application/pdf" || this.hasPdfSignature(content));
     }
 

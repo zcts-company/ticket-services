@@ -17,7 +17,7 @@ import { BusMailService } from "../services/bus/bus_mail/BusMail.js";
 import { MailboxServiceOptions } from "../services/bus/bus_mail/types/MailboxTypes.js";
 
 
-const busMailOptions:MailboxServiceOptions = busMailConfig
+const busMailOptions: MailboxServiceOptions = busMailConfig
 
 
 //common instances

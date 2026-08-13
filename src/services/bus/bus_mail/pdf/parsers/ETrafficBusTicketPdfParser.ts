@@ -1,11 +1,5 @@
-import {
-    BusTicketPaymentMethod,
-    BusTicketPriceComponent,
-    ParsedBusTicketDocument
-} from "../types/BusTicketTypes.js";
-
-import { PdfAnalysisResult } from
-    "../types/PdfTypes.js";
+import { BusTicketPaymentMethod, BusTicketPriceComponent, ParsedBusTicketDocument } from "../types/BusTicketTypes.js";
+import { PdfAnalysisResult } from "../types/PdfTypes.js";
 import { BusTicketPdfParser, PdfParserDetection } from "./interface/BusTicketPdfParser.js";
 
 
@@ -37,8 +31,7 @@ interface ETrafficPricingData {
     components: BusTicketPriceComponent[];
 }
 
-export class ETrafficBusTicketPdfParser
-    implements BusTicketPdfParser {
+export class ETrafficBusTicketPdfParser implements BusTicketPdfParser {
 
     readonly id = "e-traffic-russia-v1";
     readonly version = "1.0.0";
