@@ -8,6 +8,7 @@ import { ETrafficBusTicketPdfParserV2 } from "./parsers/ETrafficBusTicketPdfPars
 import { FiveStarsBaggageBusTicketPdfParser } from "./parsers/FiveStarsBaggageBusTicketPdfParser.js";
 import { FiveStarsPassengerBusTicketPdfParser } from "./parsers/FiveStarsPassengerBusTicketPdfParser.js";
 import { KhabarovskAvBusTicketPdfParser } from "./parsers/KhabarovskAvBusTicketPdfParser.js";
+import { KhabarovskAvBaggageBusTicketPdfParser } from "./parsers/KhabarovskAvBaggageTicketPdfParser.js";
 
 interface DetectedParser {
     parser: BusTicketPdfParser; detection: PdfParserDetection;
@@ -23,7 +24,8 @@ export class BusTicketPdfParserService {
                 new KhabarovskAvBusTicketPdfParser(),
                 new BusforBusTicketPdfParser(),
                 new ETrafficBusTicketPdfParser(),
-                new ETrafficBusTicketPdfParserV2()
+                new ETrafficBusTicketPdfParserV2(),
+                new KhabarovskAvBaggageBusTicketPdfParser()
             ]
     ) {
     }
