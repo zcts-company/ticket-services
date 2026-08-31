@@ -176,6 +176,7 @@ export interface ParsedBusTicketDocument {
         ticketNumber: string[];
     };
     pdfFileName?: string;
+    xlsFileName?: string;
     warnings: BusTicketParseWarning[];
 }
 

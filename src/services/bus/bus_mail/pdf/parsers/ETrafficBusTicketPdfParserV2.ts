@@ -1458,141 +1458,280 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         return undefined;
     }
 
-    private extractRouteDataV2(text: string): ETrafficRouteData {
-        const rowMatch = text.match(
-            /Дата\s+прибытия\s+Пункт\s+прибытия\s+Дата\s+отправления\s+Пункт\s+отправления\s+(.+?)\s+Перевозчик\s+Место\s+Платформа\s+Номер\s+Рейс/iu
-        );
+    // private extractRouteDataV2(text: string): ETrafficRouteData {
+    //     const rowMatch = text.match(
+    //         /Дата\s+прибытия\s+Пункт\s+прибытия\s+Дата\s+отправления\s+Пункт\s+отправления\s+(.+?)\s+Перевозчик\s+Место\s+Платформа\s+Номер\s+Рейс/iu
+    //     );
 
-        if (!rowMatch) {
+    //     if (!rowMatch) {
+    //         return {};
+    //     }
+
+    //     const row =
+    //         this.cleanText(rowMatch[1]);
+
+    //     /*
+    //      * Обычный билет:
+    //      *
+    //      * Вираж Место 29 Перрон 1 304а
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
+    //      */
+    //     const regularTicketMatch = row.match(
+    //         /^(.+?)\s+Место\s+(\d+)\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu
+    //     );
+
+    //     if (regularTicketMatch) {
+    //         return {
+    //             carrierName:
+    //                 this.cleanText(
+    //                     regularTicketMatch[1]
+    //                 ),
+
+    //             seat:
+    //                 regularTicketMatch[2],
+
+    //             platform:
+    //                 this.cleanText(
+    //                     regularTicketMatch[3]
+    //                 ),
+
+    //             tripNumber:
+    //                 regularTicketMatch[4],
+
+    //             routeName:
+    //                 this.cleanRouteName(
+    //                     `${regularTicketMatch[5]} - ` +
+    //                     `${regularTicketMatch[6]}`
+    //                 )
+    //         };
+    //     }
+
+    //     /*
+    //      * Фактический формат багажного билета:
+    //      *
+    //      * Вираж Багажное место Перрон 1 301в
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
+    //      *
+    //      * После "Багажное место":
+    //      * 1. платформа;
+    //      * 2. номер рейса.
+    //      */
+    //     const baggagePlatformFirstMatch = row.match(
+    //         /^(.+?)\s+Багажное\s+место\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu
+    //     );
+
+    //     if (baggagePlatformFirstMatch) {
+    //         return {
+    //             carrierName:
+    //                 this.cleanText(
+    //                     baggagePlatformFirstMatch[1]
+    //                 ),
+
+    //             seat:
+    //                 "Багажное место",
+
+    //             platform:
+    //                 this.cleanText(
+    //                     baggagePlatformFirstMatch[2]
+    //                 ),
+
+    //             tripNumber:
+    //                 baggagePlatformFirstMatch[3],
+
+    //             routeName:
+    //                 this.cleanRouteName(
+    //                     `${baggagePlatformFirstMatch[4]} - ` +
+    //                     `${baggagePlatformFirstMatch[5]}`
+    //                 )
+    //         };
+    //     }
+
+    //     /*
+    //      * Резервный формат:
+    //      *
+    //      * Вираж Багажное место 301в Перрон 1 Маршрут
+    //      *
+    //      * Оставляем на случай другого порядка элементов
+    //      * в текстовом слое похожего PDF.
+    //      */
+    //     const baggageTripFirstMatch = row.match(
+    //         /^(.+?)\s+Багажное\s+место\s+(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)\s+(.+?)\s+-\s+(.+)$/iu
+    //     );
+
+    //     if (baggageTripFirstMatch) {
+    //         return {
+    //             carrierName:
+    //                 this.cleanText(
+    //                     baggageTripFirstMatch[1]
+    //                 ),
+
+    //             seat:
+    //                 "Багажное место",
+
+    //             tripNumber:
+    //                 baggageTripFirstMatch[2],
+
+    //             platform:
+    //                 this.cleanText(
+    //                     baggageTripFirstMatch[3]
+    //                 ),
+
+    //             routeName:
+    //                 this.cleanRouteName(
+    //                     `${baggageTripFirstMatch[4]} - ` +
+    //                     `${baggageTripFirstMatch[5]}`
+    //                 )
+    //         };
+    //     }
+
+    //     console.log(
+    //         "[E-TRAFFIC V2] Route row was found, " +
+    //         "but its layout is unsupported",
+    //         {
+    //             pageNumber: undefined,
+    //             row
+    //         }
+    //     );
+
+    //     return {};
+    // }
+
+    private extractRouteDataV2(text: string): ETrafficRouteData {
+
+        /*
+         * Вариант №1.
+         *
+         * Нормальный порядок текстового слоя:
+         *
+         * Рейс Номер Платформа Место Перевозчик
+         * Комсомольск-На-Амуре ЖД(ТПУ) -
+         * Хабаровск 304а Перрон 1 Место 5 Вираж
+         * Пункт отправления ...
+         *
+         * Именно такой порядок используется
+         * в "Калимуллин.pdf".
+         */
+        const normalRowMatch = text.match(/Рейс\s+Номер\s+Платформа\s+Место\s+Перевозчик\s+(.+?)\s+Пункт\s+отправления\s+Дата\s+отправления\s+Пункт\s+прибытия\s+Дата\s+прибытия/iu);
+
+        if (normalRowMatch) {
+            const row = this.cleanText(normalRowMatch[1]);
+
+            /*
+             * Пассажирский билет:
+             *
+             * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
+             * 304а Перрон 1 Место 5 Вираж
+             */
+            const regularTicketMatch = row.match(/^(.+?\s+-\s+.+?)\s+(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)\s+Место\s+(\d+)\s+(.+)$/iu);
+
+            if (regularTicketMatch) {
+                return {
+                    routeName: this.cleanRouteName(regularTicketMatch[1]),
+                    tripNumber: regularTicketMatch[2],
+                    platform: this.cleanText(regularTicketMatch[3]),
+                    seat: regularTicketMatch[4],
+                    carrierName: this.cleanText(regularTicketMatch[5])
+                };
+            }
+
+            /*
+             * Багажный билет:
+             *
+             * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
+             * 304а Перрон 1 Багажное место Вираж
+             */
+            const baggageTicketMatch = row.match(/^(.+?\s+-\s+.+?)\s+(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)\s+Багажное\s+место\s+(.+)$/iu);
+
+            if (baggageTicketMatch) {
+                return {
+                    routeName: this.cleanRouteName(baggageTicketMatch[1]),
+                    tripNumber: baggageTicketMatch[2],
+                    platform: this.cleanText(baggageTicketMatch[3]),
+
+                    /*
+                     * Здесь это не номер пассажирского кресла.
+                     * Если твоя модель допускает undefined,
+                     * я бы не записывал "Багажное место" в seat.
+                     */
+                    seat: undefined,
+                    carrierName: this.cleanText(baggageTicketMatch[4])
+                };
+            }
+
+            console.log("[E-TRAFFIC V2] Route row in normal layout was found, " + "but its layout is unsupported", { row });
+        }
+
+        /*
+         * Вариант №2.
+         *
+         * Старый формат текстового слоя.
+         *
+         * Его НЕ удаляем, чтобы не сломать PDF,
+         * которые уже успешно разбирались V2.
+         */
+        const reversedRowMatch = text.match(/Дата\s+прибытия\s+Пункт\s+прибытия\s+Дата\s+отправления\s+Пункт\s+отправления\s+(.+?)\s+Перевозчик\s+Место\s+Платформа\s+Номер\s+Рейс/iu);
+
+        if (!reversedRowMatch) {
             return {};
         }
 
-        const row =
-            this.cleanText(rowMatch[1]);
+        const row = this.cleanText(reversedRowMatch[1]);
 
         /*
-         * Обычный билет:
+         * Старый пассажирский формат:
          *
          * Вираж Место 29 Перрон 1 304а
          * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
          */
-        const regularTicketMatch = row.match(
-            /^(.+?)\s+Место\s+(\d+)\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu
-        );
+        const regularTicketMatch = row.match(/^(.+?)\s+Место\s+(\d+)\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu);
 
         if (regularTicketMatch) {
             return {
-                carrierName:
-                    this.cleanText(
-                        regularTicketMatch[1]
-                    ),
-
-                seat:
-                    regularTicketMatch[2],
-
-                platform:
-                    this.cleanText(
-                        regularTicketMatch[3]
-                    ),
-
-                tripNumber:
-                    regularTicketMatch[4],
-
-                routeName:
-                    this.cleanRouteName(
-                        `${regularTicketMatch[5]} - ` +
-                        `${regularTicketMatch[6]}`
-                    )
+                carrierName: this.cleanText(regularTicketMatch[1]),
+                seat: regularTicketMatch[2],
+                platform: this.cleanText(regularTicketMatch[3]),
+                tripNumber: regularTicketMatch[4],
+                routeName: this.cleanRouteName(`${regularTicketMatch[5]} - ` + `${regularTicketMatch[6]}`)
             };
         }
 
         /*
-         * Фактический формат багажного билета:
+         * Старый багажный формат:
          *
          * Вираж Багажное место Перрон 1 301в
          * Комсомольск-На-Амуре ЖД(ТПУ) - Хабаровск
-         *
-         * После "Багажное место":
-         * 1. платформа;
-         * 2. номер рейса.
          */
-        const baggagePlatformFirstMatch = row.match(
-            /^(.+?)\s+Багажное\s+место\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu
-        );
+        const baggagePlatformFirstMatch = row.match(/^(.+?)\s+Багажное\s+место\s+((?:Перрон|Платформа)\s+\d+)\s+(\d{1,6}\p{L}?)\s+(.+?)\s+-\s+(.+)$/iu);
 
         if (baggagePlatformFirstMatch) {
             return {
-                carrierName:
-                    this.cleanText(
-                        baggagePlatformFirstMatch[1]
-                    ),
-
-                seat:
-                    "Багажное место",
-
-                platform:
-                    this.cleanText(
-                        baggagePlatformFirstMatch[2]
-                    ),
-
-                tripNumber:
-                    baggagePlatformFirstMatch[3],
-
-                routeName:
-                    this.cleanRouteName(
-                        `${baggagePlatformFirstMatch[4]} - ` +
-                        `${baggagePlatformFirstMatch[5]}`
-                    )
+                carrierName: this.cleanText(baggagePlatformFirstMatch[1]),
+                seat: undefined,
+                platform: this.cleanText(baggagePlatformFirstMatch[2]),
+                tripNumber: baggagePlatformFirstMatch[3],
+                routeName: this.cleanRouteName(`${baggagePlatformFirstMatch[4]} - ` + `${baggagePlatformFirstMatch[5]}`)
             };
         }
 
         /*
-         * Резервный формат:
+         * Резервный старый багажный формат:
          *
-         * Вираж Багажное место 301в Перрон 1 Маршрут
-         *
-         * Оставляем на случай другого порядка элементов
-         * в текстовом слое похожего PDF.
+         * Вираж Багажное место 301в Перрон 1
+         * Комсомольск... - Хабаровск
          */
-        const baggageTripFirstMatch = row.match(
-            /^(.+?)\s+Багажное\s+место\s+(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)\s+(.+?)\s+-\s+(.+)$/iu
-        );
+        const baggageTripFirstMatch = row.match(/^(.+?)\s+Багажное\s+место\s+(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)\s+(.+?)\s+-\s+(.+)$/iu);
 
         if (baggageTripFirstMatch) {
             return {
-                carrierName:
-                    this.cleanText(
-                        baggageTripFirstMatch[1]
-                    ),
-
-                seat:
-                    "Багажное место",
-
-                tripNumber:
-                    baggageTripFirstMatch[2],
-
-                platform:
-                    this.cleanText(
-                        baggageTripFirstMatch[3]
-                    ),
-
-                routeName:
-                    this.cleanRouteName(
-                        `${baggageTripFirstMatch[4]} - ` +
-                        `${baggageTripFirstMatch[5]}`
-                    )
+                carrierName: this.cleanText(baggageTripFirstMatch[1]),
+                seat: undefined,
+                tripNumber: baggageTripFirstMatch[2],
+                platform: this.cleanText(baggageTripFirstMatch[3]),
+                routeName: this.cleanRouteName(`${baggageTripFirstMatch[4]} - ` + `${baggageTripFirstMatch[5]}`)
             };
         }
 
-        console.log(
-            "[E-TRAFFIC V2] Route row was found, " +
-            "but its layout is unsupported",
-            {
-                pageNumber: undefined,
-                row
-            }
-        );
-
+        console.log("[E-TRAFFIC V2] Route row was found, " + "but its layout is unsupported", { row });
         return {};
     }
 }

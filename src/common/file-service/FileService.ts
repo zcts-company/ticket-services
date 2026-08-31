@@ -15,6 +15,11 @@ export class FileService {
         await fs.outputFile(path, data)
     }
 
+    async writeBinaryFile(path: string, data: Uint8Array | Buffer): Promise<void> {
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        await fs.outputFile(path, buffer);
+    }
+
     async writePdfFile(path: string, data: Uint8Array | Buffer): Promise<void> {
         const pdfBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
         await fs.outputFile(path, pdfBuffer);

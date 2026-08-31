@@ -10,6 +10,9 @@ import config from "../../../config/bus/bus_config.json" with {type: 'json'}
 import { ProcessedBusTicket } from "./types/ProcessedBusTicket.js";
 import { join } from "node:path";
 import { BusTransportService } from "./transport/BusTransportService.js";
+import { ExcelMailAttachment, MailExcelAttachmentService } from "./xls/MailExcelAttachmentService.js";
+
+
 export class BusMailService implements BusTicketService {
 
     /**
@@ -26,7 +29,8 @@ export class BusMailService implements BusTicketService {
     constructor(
         private readonly options: MailboxServiceOptions,
         private readonly pdfProcessingService: BusPdfProcessingService = new BusPdfProcessingService(),
-        private readonly transportService: BusTransportService = new BusTransportService()
+        private readonly transportService: BusTransportService = new BusTransportService(),
+        private readonly excelAttachmentService: MailExcelAttachmentService = new MailExcelAttachmentService()
     ) {
         this.fileService = fileService;
         this.currentDirectory = config.fileOutput.mainPath
@@ -245,10 +249,26 @@ export class BusMailService implements BusTicketService {
 
     private async processMessage(mail: IncomingMail): Promise<void> {
         logger.info(`[${this.getServiceName()}] ` + `Starting PDF processing. ` + `UID: ${mail.uid}`);
-
         const processedTickets = await this.pdfProcessingService.processMail(mail);
-
         logger.info(`[${this.getServiceName()}] ` + `PDF attachments processed. ` + `UID: ${mail.uid}, ` + `documents: ${processedTickets.length}`);
+
+        /*
+        * До этой точки дошли — письмо является целевым.
+        * Теперь можно искать XLS/XLSX.
+        */
+        const excelAttachments = await this.excelAttachmentService.extractExcelAttachments(mail.source);
+
+        /*
+         * В XML предусмотрено одно поле xlsFileName,
+         * поэтому несколько Excel-файлов однозначно
+         * сопоставить с билетами невозможно.
+         */
+        if (excelAttachments.length > 1) {
+            throw new Error(`Email with UID ${mail.uid} contains ` + `${excelAttachments.length} Excel attachments. ` + `Expected at most one XLS/XLSX attachment`);
+        }
+
+        const excelAttachment = excelAttachments[0];
+        const xlsFileName = excelAttachment ? this.sanitizeFilename(excelAttachment.filename) : undefined;
 
         /*
          * На этом этапе обработаны ВСЕ PDF-вложения письма
@@ -263,7 +283,15 @@ export class BusMailService implements BusTicketService {
         ];
 
         for (const processedTicket of processedTickets) {
-            await this.processParsedDocument(mail, processedTicket, ticketNumbers);
+            await this.processParsedDocument(mail, processedTicket, ticketNumbers, xlsFileName);
+        }
+
+        /*
+        * Сам Excel отправляется только ОДИН раз
+        * после обработки всех билетов.
+        */
+        if (excelAttachment && xlsFileName) {
+            await this.processExcelAttachment(mail, excelAttachment, xlsFileName);
         }
     }
 
@@ -323,7 +351,7 @@ export class BusMailService implements BusTicketService {
             : date;
     }
 
-    private async processParsedDocument(mail: IncomingMail, processedTicket: ProcessedBusTicket, ticketNumbers: string[]): Promise<void> {
+    private async processParsedDocument(mail: IncomingMail, processedTicket: ProcessedBusTicket, ticketNumbers: string[], xlsFileName?: string): Promise<void> {
         const { document, pdfContent } = processedTicket;
 
         logger.info(
@@ -356,7 +384,8 @@ export class BusMailService implements BusTicketService {
             ticketNumbers: {
                 ticketNumber: ticketNumbers
             },
-            pdfFileName: `${outputName}.pdf`
+            pdfFileName: `${outputName}.pdf`,
+            xlsFileName
         };
 
         const xmlContent = fileConverterXml.jsonToXml(documentForXml);
@@ -368,6 +397,15 @@ export class BusMailService implements BusTicketService {
 
         logger.info(`[${this.getServiceName()}] Ticket files sent ` + `to Samba successfully. ` + `UID: ${mail.uid}, ` + `ticket: "${outputName}"`);
         logger.info(`[${this.getServiceName()}] Ticket files saved. ` + `UID: ${mail.uid}, ` + `XML: "${xmlPath}", ` + `PDF: "${pdfPath}"`);
+    }
+
+    private async processExcelAttachment(mail: IncomingMail, attachment: ExcelMailAttachment, xlsFileName: string): Promise<void> {
+
+        const excelPath = join(this.currentDirectory, xlsFileName);
+        logger.info(`[${this.getServiceName()}] ` + `Saving Excel attachment. ` + `UID: ${mail.uid}, ` + `filename: "${xlsFileName}"`);
+        await this.fileService.writeBinaryFile(excelPath, attachment.content);
+        await this.transportService.sendFile(excelPath);
+        logger.info(`[${this.getServiceName()}] ` + `Excel attachment sent to Samba successfully. ` + `UID: ${mail.uid}, ` + `filename: "${xlsFileName}"`);
     }
 
     private createOutputName(mail: IncomingMail, document: ParsedBusTicketDocument): string {
