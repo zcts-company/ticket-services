@@ -84,7 +84,7 @@ export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfP
         const purchaseDateTime =
             this.extractDateTime(
                 text,
-                /Дата покупки\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/i
+                /Дата покупки\s+(\d{2}\.\d{2}\.(?:\d{2}|\d{4}))\s*(?:в\s*)?(\d{2}:\d{2})/iu
             );
 
         const ticketSeries =
@@ -356,6 +356,78 @@ export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfP
         };
     }
 
+    // private extractTripPoints(
+    //     text: string
+    // ): ParsedTripPoints {
+    //     const blockMatch = text.match(
+    //         /Пункт отправления\s+Дата отправления\s+Пункт прибытия\s+Дата прибытия\s+(.+?)\s+Информация о платеже/iu
+    //     );
+
+    //     if (!blockMatch) {
+    //         return {};
+    //     }
+
+    //     const block = this.clean(
+    //         blockMatch[1]
+    //     );
+
+    //     const dateTimeExpression =
+    //         /(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/g;
+
+    //     const matches = [
+    //         ...block.matchAll(
+    //             dateTimeExpression
+    //         )
+    //     ];
+
+    //     if (matches.length < 2) {
+    //         return {};
+    //     }
+
+    //     const departure = matches[0];
+    //     const arrival = matches[1];
+
+    //     const departureStart =
+    //         departure.index ?? 0;
+
+    //     const arrivalStart =
+    //         arrival.index ?? 0;
+
+    //     const departureStation = this.clean(
+    //         block.slice(0, departureStart)
+    //     );
+
+    //     const between = this.clean(
+    //         block.slice(
+    //             departureStart + departure[0].length,
+    //             arrivalStart
+    //         )
+    //     );
+
+    //     const afterArrival = this.clean(
+    //         block.slice(
+    //             arrivalStart + arrival[0].length
+    //         )
+    //     );
+
+    //     const arrivalStation = this.clean(
+    //         [between, afterArrival]
+    //             .filter(Boolean)
+    //             .join(" ")
+    //     );
+
+    //     return {
+    //         departureStation:
+    //             departureStation || undefined,
+    //         departureDate: departure[1],
+    //         departureTime: departure[2],
+    //         arrivalStation:
+    //             arrivalStation || undefined,
+    //         arrivalDate: arrival[1],
+    //         arrivalTime: arrival[2]
+    //     };
+    // }
+
     private extractTripPoints(
         text: string
     ): ParsedTripPoints {
@@ -372,7 +444,7 @@ export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfP
         );
 
         const dateTimeExpression =
-            /(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/g;
+            /(\d{2}\.\d{2}\.(?:\d{2}|\d{4}))\s*(?:в\s*)?(\d{2}:\d{2})/giu;
 
         const matches = [
             ...block.matchAll(
@@ -394,7 +466,10 @@ export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfP
             arrival.index ?? 0;
 
         const departureStation = this.clean(
-            block.slice(0, departureStart)
+            block.slice(
+                0,
+                departureStart
+            )
         );
 
         const between = this.clean(
@@ -419,12 +494,21 @@ export class FiveStarsPassengerBusTicketPdfParser extends BaseRegexBusTicketPdfP
         return {
             departureStation:
                 departureStation || undefined,
-            departureDate: departure[1],
-            departureTime: departure[2],
+
+            departureDate:
+                departure[1],
+
+            departureTime:
+                departure[2],
+
             arrivalStation:
                 arrivalStation || undefined,
-            arrivalDate: arrival[1],
-            arrivalTime: arrival[2]
+
+            arrivalDate:
+                arrival[1],
+
+            arrivalTime:
+                arrival[2]
         };
     }
 }

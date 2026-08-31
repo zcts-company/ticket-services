@@ -1,9 +1,9 @@
-import {    ParsedBusTicketDocument} from "../types/BusTicketTypes.js";
-import { PdfAnalysisResult } from    "../types/PdfTypes.js";
-import {    BusTicketPdfParser,    PdfParserDetection} from "./interface/BusTicketPdfParser.js";
-import {    BaseRegexBusTicketPdfParser,    ParsedRouteData,    ParsedTripPoints} from "./BaseRegexBusTicketPdfParser.js";
+import { ParsedBusTicketDocument } from "../types/BusTicketTypes.js";
+import { PdfAnalysisResult } from "../types/PdfTypes.js";
+import { BusTicketPdfParser, PdfParserDetection } from "./interface/BusTicketPdfParser.js";
+import { BaseRegexBusTicketPdfParser, ParsedRouteData, ParsedTripPoints } from "./BaseRegexBusTicketPdfParser.js";
 
-export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdfParser    implements BusTicketPdfParser {
+export class FiveStarsBaggageBusTicketPdfParser extends BaseRegexBusTicketPdfParser implements BusTicketPdfParser {
 
     readonly id = "five-stars-baggage-v1";
     readonly version = "1.0.0";
@@ -116,7 +116,7 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
         const purchaseDateTime =
             this.extractDateTime(
                 text,
-                /Дата покупки\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/i
+                /Дата покупки\s+(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})/iu
             );
 
         const passengerSection =
@@ -346,6 +346,123 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
         };
     }
 
+    // private extractTripPoints(
+    //     text: string,
+    //     routeDepartureStation:
+    //         string | undefined
+    // ): ParsedTripPoints & {
+    //     carrierName?: string;
+    //     carrierId?: string;
+    // } {
+    //     const blockMatch = text.match(
+    //         /Отправление\s+Прибытие\s+Перевозчик\s+(.+?)\s+Информация о платеже/iu
+    //     );
+
+    //     if (!blockMatch) {
+    //         return {};
+    //     }
+
+    //     const block = this.clean(
+    //         blockMatch[1]
+    //     );
+
+    //     /*
+    //      * Основной порядок pdf-parse:
+    //      *
+    //      * departure date time arrival date time carrier INN
+    //      */
+    //     const logicalMatch = block.match(
+    //         /^(.+?)\s+(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})\s+(.+?)\s+(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})\s+(.+?),\s*ИНН\s+(\d{6,})$/iu
+    //     );
+
+    //     if (logicalMatch) {
+    //         const departureLocation =
+    //             this.splitStationAndAddress(
+    //                 logicalMatch[1],
+    //                 routeDepartureStation
+    //             );
+
+    //         return {
+    //             departureStation:
+    //                 departureLocation.station,
+    //             departureAddress:
+    //                 departureLocation.address,
+    //             departureDate: logicalMatch[2],
+    //             departureTime: logicalMatch[3],
+    //             arrivalStation:
+    //                 this.clean(logicalMatch[4]),
+    //             arrivalDate: logicalMatch[5],
+    //             arrivalTime: logicalMatch[6],
+    //             carrierName:
+    //                 this.clean(logicalMatch[7]),
+    //             carrierId: logicalMatch[8]
+    //         };
+    //     }
+
+    //     /*
+    //      * Fallback для текстового слоя, где сначала идут
+    //      * обе станции и перевозчик, а затем обе даты.
+    //      */
+    //     const carrierMatch = block.match(
+    //         /((?:ООО|ИП|АО|ПАО)\s+["«][^"»]+["»]),\s*ИНН\s+(\d{6,})/iu
+    //     );
+
+    //     const dateTimes = [
+    //         ...block.matchAll(
+    //             /(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})/giu
+    //         )
+    //     ];
+
+    //     if (
+    //         !carrierMatch ||
+    //         carrierMatch.index === undefined ||
+    //         dateTimes.length < 2
+    //     ) {
+    //         return {};
+    //     }
+
+    //     const locations = this.clean(
+    //         block.slice(0, carrierMatch.index)
+    //     );
+
+    //     let departureStation:
+    //         string | undefined;
+    //     let arrivalStation:
+    //         string | undefined;
+
+    //     if (
+    //         routeDepartureStation &&
+    //         locations
+    //             .toLocaleLowerCase("ru")
+    //             .startsWith(
+    //                 routeDepartureStation
+    //                     .toLocaleLowerCase("ru")
+    //             )
+    //     ) {
+    //         departureStation =
+    //             routeDepartureStation;
+
+    //         arrivalStation = this.clean(
+    //             locations.slice(
+    //                 routeDepartureStation.length
+    //             )
+    //         ) || undefined;
+    //     }
+
+    //     return {
+    //         departureStation,
+    //         departureDate: dateTimes[0][1],
+    //         departureTime: dateTimes[0][2],
+    //         arrivalStation,
+    //         arrivalDate: dateTimes[1][1],
+    //         arrivalTime: dateTimes[1][2],
+    //         carrierName: this.clean(
+    //             carrierMatch[1]
+    //         ),
+    //         carrierId: carrierMatch[2]
+    //     };
+    // }
+
     private extractTripPoints(
         text: string,
         routeDepartureStation:
@@ -367,12 +484,19 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
         );
 
         /*
+         * Поддерживаем даты:
+         *
+         * 31.08.26 в 23:55
+         * 31.08.26 23:55
+         * 31.08.2026 в 23:55
+         * 31.08.2026 23:55
+         *
          * Основной порядок pdf-parse:
          *
          * departure date time arrival date time carrier INN
          */
         const logicalMatch = block.match(
-            /^(.+?)\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+(.+?)\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})\s+(.+?),\s*ИНН\s+(\d{6,})$/iu
+            /^(.+?)\s+(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})\s+(.+?)\s+(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})\s+(.+?),\s*ИНН\s+(\d{6,})$/iu
         );
 
         if (logicalMatch) {
@@ -387,15 +511,24 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
                     departureLocation.station,
                 departureAddress:
                     departureLocation.address,
-                departureDate: logicalMatch[2],
-                departureTime: logicalMatch[3],
+                departureDate:
+                    logicalMatch[2],
+                departureTime:
+                    logicalMatch[3],
                 arrivalStation:
-                    this.clean(logicalMatch[4]),
-                arrivalDate: logicalMatch[5],
-                arrivalTime: logicalMatch[6],
+                    this.clean(
+                        logicalMatch[4]
+                    ),
+                arrivalDate:
+                    logicalMatch[5],
+                arrivalTime:
+                    logicalMatch[6],
                 carrierName:
-                    this.clean(logicalMatch[7]),
-                carrierId: logicalMatch[8]
+                    this.clean(
+                        logicalMatch[7]
+                    ),
+                carrierId:
+                    logicalMatch[8]
             };
         }
 
@@ -409,7 +542,7 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
 
         const dateTimes = [
             ...block.matchAll(
-                /(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/g
+                /(\d{2}\.\d{2}\.(?:\d{4}|\d{2}))\s*(?:в\s*)?(\d{2}:\d{2})/giu
             )
         ];
 
@@ -422,11 +555,15 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
         }
 
         const locations = this.clean(
-            block.slice(0, carrierMatch.index)
+            block.slice(
+                0,
+                carrierMatch.index
+            )
         );
 
         let departureStation:
             string | undefined;
+
         let arrivalStation:
             string | undefined;
 
@@ -451,15 +588,21 @@ export class FiveStarsBaggageBusTicketPdfParser    extends BaseRegexBusTicketPdf
 
         return {
             departureStation,
-            departureDate: dateTimes[0][1],
-            departureTime: dateTimes[0][2],
+            departureDate:
+                dateTimes[0][1],
+            departureTime:
+                dateTimes[0][2],
             arrivalStation,
-            arrivalDate: dateTimes[1][1],
-            arrivalTime: dateTimes[1][2],
-            carrierName: this.clean(
-                carrierMatch[1]
-            ),
-            carrierId: carrierMatch[2]
+            arrivalDate:
+                dateTimes[1][1],
+            arrivalTime:
+                dateTimes[1][2],
+            carrierName:
+                this.clean(
+                    carrierMatch[1]
+                ),
+            carrierId:
+                carrierMatch[2]
         };
     }
 }
