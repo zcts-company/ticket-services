@@ -263,12 +263,23 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
 
         const vehicleType = this.extractVehicleType(text, lines);
 
+        // const passengerName =
+        //     this.extractRussianFullName(
+        //         passengerSection
+        //     ) ??
+        //     this.extractPassengerNameWithInitials(
+        //         text
+        //     );
+
         const passengerName =
-            this.extractRussianFullName(
+            this.extractPassengerNameWithInitials(
                 passengerSection
             ) ??
             this.extractPassengerNameWithInitials(
                 text
+            ) ??
+            this.extractRussianFullName(
+                passengerSection
             );
 
         const passengerDocument =
@@ -276,9 +287,10 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
                 passengerSection
             );
 
-        const route = this.extractRouteDataV2(text);
+        const forwardTripPoints = this.extractTripPointsFromForwardLayout(text) ?? this.extractTripPointsFromOcrLayout(text);
+        const route = this.extractRouteDataV2(text, forwardTripPoints);
         const routeParts = this.splitRoute(route.routeName);
-        const tripPoints = this.extractTripPointsFromText(text, routeParts.departureStation, routeParts.arrivalStation);
+        const tripPoints = forwardTripPoints ?? this.extractTripPointsFromText(text, routeParts.departureStation, routeParts.arrivalStation);
 
         const paymentMethodRaw =
             this.extractFirstGroup(
@@ -413,8 +425,8 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
                         ),
 
                     station:
-                        tripPoints.departureStation ??
-                        routeParts.departureStation,
+                        routeParts.departureStation ??
+                        tripPoints.departureStation,
 
                     address:
                         tripPoints.departureAddress,
@@ -437,8 +449,8 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
                         ),
 
                     station:
-                        tripPoints.arrivalStation ??
-                        routeParts.arrivalStation,
+                        routeParts.arrivalStation ??
+                        tripPoints.arrivalStation,
 
                     address:
                         tripPoints.arrivalAddress,
@@ -686,17 +698,72 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         };
     }
 
+    // private extractRussianFullName(
+    //     value: string
+    // ): string | undefined {
+    //     const normalizedValue =
+    //         this.cleanText(value);
+
+    //     const match = normalizedValue.match(
+    //         /(?:^|[^А-Яа-яЁё-])([А-ЯЁ][А-Яа-яЁё-]+(?:\s+[А-ЯЁ][А-Яа-яЁё-]+){2})(?=$|[^А-Яа-яЁё-])/u
+    //     );
+
+    //     return match?.[1];
+    // }
+
     private extractRussianFullName(
         value: string
     ): string | undefined {
         const normalizedValue =
             this.cleanText(value);
 
-        const match = normalizedValue.match(
-            /(?:^|[^А-Яа-яЁё-])([А-ЯЁ][А-Яа-яЁё-]+(?:\s+[А-ЯЁ][А-Яа-яЁё-]+){2})(?=$|[^А-Яа-яЁё-])/u
-        );
+        const match =
+            normalizedValue.match(
+                /(?:^|[^А-Яа-яЁё-])([А-ЯЁ][А-Яа-яЁё-]+(?:\s+[А-ЯЁ][А-Яа-яЁё-]+){2})(?=$|[^А-Яа-яЁё-])/u
+            );
 
-        return match?.[1];
+        const candidate =
+            match?.[1]
+                ? this.cleanText(
+                    match[1]
+                )
+                : undefined;
+
+        if (!candidate) {
+            return undefined;
+        }
+
+        /*
+         * OCR может принять заголовок таблицы за ФИО:
+         *
+         * Пассажир Паспорт Тариф
+         */
+        const forbiddenWords = [
+            "пассажир",
+            "паспорт",
+            "тариф",
+            "комиссия",
+            "итого",
+            "перевозчик",
+            "платформа",
+            "номер"
+        ];
+
+        const words =
+            candidate
+                .toLocaleLowerCase("ru")
+                .split(/\s+/);
+
+        if (
+            words.some(
+                (word) =>
+                    forbiddenWords.includes(word)
+            )
+        ) {
+            return undefined;
+        }
+
+        return candidate;
     }
 
     private splitRoute(
@@ -1596,7 +1663,7 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
     //     return {};
     // }
 
-    private extractRouteDataV2(text: string): ETrafficRouteData {
+    private extractRouteDataV2(text: string, tripPoints?: ETrafficTripPoints): ETrafficRouteData {
 
         /*
          * Вариант №1.
@@ -1615,6 +1682,23 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
 
         if (normalRowMatch) {
             const row = this.cleanText(normalRowMatch[1]);
+
+            /*
+            * Если прямой блок "Пункт отправления / Пункт прибытия"
+            * удалось разобрать, он для OCR надёжнее порядка
+            * колонок таблицы.
+            */
+            if (tripPoints) {
+                const ocrRoute =
+                    this.extractOcrRouteData(
+                        row,
+                        tripPoints
+                    );
+
+                if (ocrRoute) {
+                    return ocrRoute;
+                }
+            }
 
             /*
              * Пассажирский билет:
@@ -1653,12 +1737,27 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
                      * Если твоя модель допускает undefined,
                      * я бы не записывал "Багажное место" в seat.
                      */
-                    seat: undefined,
+                    seat: "Багажное место",
                     carrierName: this.cleanText(baggageTicketMatch[4])
                 };
             }
 
+            const ocrMatch =
+                this.extractOcrRouteData(
+                    row,
+                    tripPoints
+                );
+
+            if (ocrMatch) {
+                return ocrMatch;
+            }
+
             console.log("[E-TRAFFIC V2] Route row in normal layout was found, " + "but its layout is unsupported", { row });
+        }
+
+        const ocrRoute = this.extractRouteDataFromOcrTable(text, tripPoints);
+        if (ocrRoute) {
+            return ocrRoute;
         }
 
         /*
@@ -1706,7 +1805,7 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         if (baggagePlatformFirstMatch) {
             return {
                 carrierName: this.cleanText(baggagePlatformFirstMatch[1]),
-                seat: undefined,
+                seat: "Багажное место",
                 platform: this.cleanText(baggagePlatformFirstMatch[2]),
                 tripNumber: baggagePlatformFirstMatch[3],
                 routeName: this.cleanRouteName(`${baggagePlatformFirstMatch[4]} - ` + `${baggagePlatformFirstMatch[5]}`)
@@ -1724,7 +1823,7 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         if (baggageTripFirstMatch) {
             return {
                 carrierName: this.cleanText(baggageTripFirstMatch[1]),
-                seat: undefined,
+                seat: "Багажное место",
                 tripNumber: baggageTripFirstMatch[2],
                 platform: this.cleanText(baggageTripFirstMatch[3]),
                 routeName: this.cleanRouteName(`${baggageTripFirstMatch[4]} - ` + `${baggageTripFirstMatch[5]}`)
@@ -1734,4 +1833,540 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         console.log("[E-TRAFFIC V2] Route row was found, " + "but its layout is unsupported", { row });
         return {};
     }
+
+    private extractTripPointsFromForwardLayout(text: string): ETrafficTripPoints | undefined {
+        const blockMatch = text.match(/Пункт\s+отправления\s+Дата\s+отправления\s+Пункт\s+прибытия\s+Дата\s+прибытия\s+(.+?)\s+Информация\s+о\s+платеже/iu);
+
+        if (!blockMatch) {
+            return undefined;
+        }
+
+        const block = this.cleanText(blockMatch[1]);
+        const dateTimes = [...block.matchAll(/(\d{2}\.\d{2}\.\d{2,4})\s+(\d{2}:\d{2})/gu)];
+        if (dateTimes.length < 2) {
+            return undefined;
+        }
+        const departure = dateTimes[0];
+        const arrival = dateTimes[1];
+        const departureStart = departure.index ?? 0;
+        const arrivalStart = arrival.index ?? 0;
+
+        /*
+         * OCR в Бжиков.pdf даёт примерно:
+         *
+         * Комсомольск-На-Амуре Ж, уре ЖД
+         * 03.09.2026 23:55
+         * Хабаровск Аэропорт
+         * 04.09.26 05:50
+         * (ТПУ), Магистральное шоссе 2\2,
+         *
+         * Хвост после второй даты фактически относится
+         * к пункту отправления из-за особенностей OCR таблицы,
+         * поэтому к arrivalStation его не добавляем.
+         */
+        const departureLocationRaw = this.cleanText(block.slice(0, departureStart));
+        const arrivalLocationRaw = this.cleanText(block.slice(departureStart + departure[0].length, arrivalStart));
+
+        return {
+            departureStation: departureLocationRaw || undefined,
+            departureDate: departure[1],
+            departureTime: departure[2],
+            arrivalStation: arrivalLocationRaw || undefined,
+            arrivalDate: arrival[1],
+            arrivalTime: arrival[2]
+        };
+    }
+
+    // private extractOcrRouteData(row: string, tripPoints?: ETrafficTripPoints): ETrafficRouteData | undefined {
+
+    //     const normalized = this.cleanText(row);
+
+    //     /*
+    //      * PSM 3 обычно даёт:
+    //      *
+    //      * Passenger:
+    //      *
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) -
+    //      * 304а Перрон 1 Место 5 Вираж
+    //      * Хабаровск
+    //      *
+    //      * После normalizeText:
+    //      *
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) -
+    //      * 304а Перрон 1 Место 5 Вираж Хабаровск
+    //      *
+    //      * Baggage:
+    //      *
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) -
+    //      * 304а Перрон 1 Багажное Вираж
+    //      * Хабаровск место
+    //      */
+
+    //     const tripMatch = normalized.match(/(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)/iu);
+    //     if (!tripMatch || tripMatch.index === undefined) {
+    //         return undefined;
+    //     }
+
+    //     /*
+    //      * Всё перед номером рейса:
+    //      *
+    //      * Комсомольск-На-Амуре ЖД(ТПУ) -
+    //      */
+    //     const beforeTrip =
+    //         this.cleanText(
+    //             normalized.slice(
+    //                 0,
+    //                 tripMatch.index
+    //             )
+    //         );
+    //     /*
+    //      * Убираем разделитель маршрута в конце.
+    //      */
+    //     const departureMatch = beforeTrip.match(/^(.+?)\s+-\s+/u);
+    //     const departureStation = this.cleanText(departureMatch?.[1] ?? beforeTrip.replace(/\s+-\s+Багажное.*$/iu, "").replace(/\s*-\s*$/, ""));
+
+    //     if (!departureStation) {
+    //         return undefined;
+    //     }
+
+    //     /*
+    //      * Пункт прибытия берём из отдельной таблицы
+    //      * Пункт отправления / Пункт прибытия.
+    //      *
+    //      * Она для OCR значительно надёжнее таблицы рейса.
+    //      *
+    //      * Например:
+    //      *
+    //      * Хабаровск Аэропорт
+    //      */
+    //     const arrivalCity = this.extractOcrCityName(tripPoints?.arrivalStation);
+    //     if (!arrivalCity) {
+    //         return undefined;
+    //     }
+
+    //     /*
+    //      * Определяем место.
+    //      */
+    //     const seatMatch = normalized.match(/Место\s+(\d+)/iu);
+
+    //     /*
+    //      * В PSM3 багаж может выглядеть:
+    //      *
+    //      * Багажное Вираж Хабаровск место
+    //      *
+    //      * поэтому не требуем, чтобы слова
+    //      * "Багажное место" находились рядом.
+    //      */
+    //     const isBaggage = /Багажное/iu.test(normalized);
+
+    //     /*
+    //      * Всё после:
+    //      *
+    //      * 304а Перрон 1
+    //      */
+    //     let carrierPart = this.cleanText(normalized.slice(tripMatch.index + tripMatch[0].length));
+    //     if (isBaggage) {
+    //         /*
+    //          * Багажное Вираж Хабаровск место
+    //          *
+    //          * ->
+    //          *
+    //          * Вираж Хабаровск место
+    //          */
+    //         carrierPart = carrierPart.replace(/^Багажное(?:\s+место)?\s*/iu, "");
+    //     } else {
+    //         /*
+    //          * Место 5 Вираж Хабаровск
+    //          *
+    //          * ->
+    //          *
+    //          * Вираж Хабаровск
+    //          */
+    //         carrierPart = carrierPart.replace(/^Место\s+\d+\s*/iu, "");
+    //     }
+
+    //     /*
+    //      * В baggage OCR слово "место" может оказаться
+    //      * после пункта прибытия:
+    //      *
+    //      * Вираж Хабаровск место
+    //      */
+    //     carrierPart = carrierPart.replace(/\s+место\s*$/iu, "");
+
+    //     /*
+    //      * Пункт прибытия OCR переносит после перевозчика:
+    //      *
+    //      * Вираж Хабаровск
+    //      *
+    //      * Убираем Хабаровск.
+    //      */
+    //     const arrivalIndex = carrierPart.toLocaleLowerCase("ru").lastIndexOf(arrivalCity.toLocaleLowerCase("ru"));
+
+    //     if (arrivalIndex > 0) {
+    //         carrierPart = carrierPart.slice(0, arrivalIndex).trim();
+    //     }
+
+    //     const carrierName = carrierPart || undefined;
+
+    //     return {
+    //         routeName: this.cleanRouteName(`${departureStation} - ${arrivalCity}`),
+    //         tripNumber: tripMatch[1],
+    //         platform: this.cleanText(tripMatch[2]),
+    //         seat: isBaggage ? "Багажное место" : seatMatch?.[1],
+    //         carrierName
+    //     };
+    // }
+
+    private extractOcrRouteData(
+        row: string,
+        tripPoints?: ETrafficTripPoints
+    ): ETrafficRouteData | undefined {
+
+        const normalized =
+            this.cleanText(row);
+
+        /*
+         * Passenger:
+         *
+         * Комсомольск-На-Амуре ЖД(ТПУ) -
+         * 304а Перрон 1 Место 5 Вираж Хабаровск
+         *
+         * Baggage:
+         *
+         * Комсомольск-На-Амуре ЖД(ТПУ) -
+         * 304a Перрон 1 Багажное Вираж Хабаровск место
+         */
+
+        const tripMatch =
+            normalized.match(
+                /(\d{1,6}\p{L}?)\s+((?:Перрон|Платформа)\s+\d+)/iu
+            );
+
+        if (
+            !tripMatch ||
+            tripMatch.index === undefined
+        ) {
+            return undefined;
+        }
+
+        /*
+         * Всё до номера рейса:
+         *
+         * Комсомольск-На-Амуре ЖД(ТПУ) -
+         */
+        const beforeTrip =
+            this.cleanText(
+                normalized.slice(
+                    0,
+                    tripMatch.index
+                )
+            );
+
+        /*
+         * Станцию отправления берём только
+         * до первого разделителя " - ".
+         */
+        const departureMatch =
+            beforeTrip.match(
+                /^(.+?)\s+-\s*/u
+            );
+
+        const departureStation =
+            this.cleanText(
+                departureMatch?.[1] ??
+                beforeTrip.replace(
+                    /\s*-\s*$/,
+                    ""
+                )
+            );
+
+        if (!departureStation) {
+            return undefined;
+        }
+
+        /*
+         * Прибытие берём не из строки рейса,
+         * а из отдельной таблицы:
+         *
+         * Хабаровск Аэропорт
+         *
+         * extractOcrCityName() даст:
+         *
+         * Хабаровск
+         */
+        const arrivalCity =
+            this.extractOcrCityName(
+                tripPoints?.arrivalStation
+            );
+
+        if (!arrivalCity) {
+            return undefined;
+        }
+
+        /*
+         * Важно: никаких \b вокруг кириллицы.
+         */
+        const isBaggage =
+            /Багажное/iu.test(
+                normalized
+            );
+
+        const seatMatch =
+            normalized.match(
+                /Место\s+(\d+)/iu
+            );
+
+        /*
+         * Всё после:
+         *
+         * 304a Перрон 1
+         */
+        let carrierPart =
+            this.cleanText(
+                normalized.slice(
+                    tripMatch.index +
+                    tripMatch[0].length
+                )
+            );
+
+        if (isBaggage) {
+
+            /*
+             * Багажное Вираж Хабаровск место
+             *
+             * ->
+             *
+             * Вираж Хабаровск место
+             */
+            carrierPart =
+                carrierPart.replace(
+                    /^Багажное(?:\s+место)?\s*/iu,
+                    ""
+                );
+
+            /*
+             * PSM 3 переносит "место" в конец:
+             *
+             * Вираж Хабаровск место
+             *
+             * ->
+             *
+             * Вираж Хабаровск
+             */
+            carrierPart =
+                carrierPart.replace(
+                    /\s+место\s*$/iu,
+                    ""
+                );
+
+        } else {
+
+            /*
+             * Место 5 Вираж Хабаровск
+             *
+             * ->
+             *
+             * Вираж Хабаровск
+             */
+            carrierPart =
+                carrierPart.replace(
+                    /^Место\s+\d+\s*/iu,
+                    ""
+                );
+        }
+
+        /*
+         * OCR добавляет пункт прибытия после перевозчика:
+         *
+         * Вираж Хабаровск
+         *
+         * Нам нужен только:
+         *
+         * Вираж
+         */
+        const arrivalIndex =
+            carrierPart
+                .toLocaleLowerCase("ru")
+                .lastIndexOf(
+                    arrivalCity
+                        .toLocaleLowerCase("ru")
+                );
+
+        if (arrivalIndex > 0) {
+            carrierPart =
+                carrierPart
+                    .slice(
+                        0,
+                        arrivalIndex
+                    )
+                    .trim();
+        }
+
+        /*
+         * Дополнительная страховка.
+         */
+        carrierPart =
+            carrierPart
+                .replace(
+                    /^Багажное\s*/iu,
+                    ""
+                )
+                .replace(
+                    /\s+место$/iu,
+                    ""
+                )
+                .trim();
+
+        const carrierName =
+            carrierPart ||
+            undefined;
+
+        return {
+            routeName:
+                this.cleanRouteName(
+                    `${departureStation} - ${arrivalCity}`
+                ),
+
+            tripNumber:
+                tripMatch[1],
+
+            platform:
+                this.cleanText(
+                    tripMatch[2]
+                ),
+
+            seat:
+                isBaggage
+                    ? "Багажное место"
+                    : seatMatch?.[1],
+
+            carrierName
+        };
+    }
+
+    private extractOcrCityName(station: string | undefined): string | undefined {
+        if (!station) {
+            return undefined;
+        }
+        const value = this.cleanText(station);
+
+        /*
+         * Хабаровск Аэропорт
+         *          ^
+         *
+         * Комсомольск-На-Амуре ЖД(ТПУ)
+         *                       ^
+         *
+         * Также учитываем OCR-вариант:
+         *
+         * Комсомольск-На-Амуре Ж, уре ЖД
+         */
+        const match = value.match(/^(.+?)(?=\s+(?:ЖД(?:\([^)]*\))?|Автовокзал|АВ|Аэропорт|Остановка)(?=\s|$|[,.;:]))/iu);
+        return this.cleanText(match?.[1] ?? value) || undefined;
+    }
+
+    private extractTripPointsFromOcrLayout(text: string): ETrafficTripPoints | undefined {
+
+        const sectionMatch = text.match(/(?:Информация\s+[оo]\s+рейсе|Рейс\s+Номер\s+Платформа\s+Место\s+Перевозчик)\s+(.+?)(?=Информация\s+[оo]\s+платеже|Оплачено)/iu);
+        if (!sectionMatch) {
+            return undefined;
+        }
+
+        const section = this.cleanText(sectionMatch[1]);
+        const dateTimes = [...section.matchAll(/(\d{2}\.\d{2}\.\d{2,4})\s+(\d{2}:\d{2})/gu)];
+
+        if (dateTimes.length < 2) {
+            return undefined;
+        }
+        const departure = dateTimes[0];
+        const arrival = dateTimes[1];
+        const arrivalLocationRaw = this.cleanText(section.slice((departure.index ?? 0) + departure[0].length, arrival.index ?? 0));
+        const arrivalStation = this.extractOcrArrivalStation(arrivalLocationRaw);
+
+        return {
+            departureDate: departure[1],
+            departureTime: departure[2],
+            arrivalStation,
+            arrivalDate: arrival[1],
+            arrivalTime: arrival[2]
+        };
+    }
+
+    private extractOcrArrivalStation(value: string): string | undefined {
+        const normalized = this.cleanText(value);
+        if (!normalized) {
+            return undefined;
+        }
+        const match = normalized.match(/([А-ЯЁ][А-Яа-яЁё-]+(?:\s+(?:Аэропорт|Автовокзал|АВ|ЖД(?:\([^)]*\))?))?)(?=\s*$|[,.;])/u);
+        return this.cleanText(match?.[1] ?? normalized) || undefined;
+    }
+
+    private extractRouteDataFromOcrTable(
+        text: string,
+        tripPoints?: ETrafficTripPoints
+    ): ETrafficRouteData | undefined {
+
+        /*
+         * Берём всю секцию рейса.
+         *
+         * Поддерживаем как кириллическую "о",
+         * так и OCR-ошибку с латинской "o".
+         */
+        const sectionMatch =
+            text.match(
+                /Информация\s+[оo]\s+рейсе\s+(.+?)(?=Информация\s+[оo]\s+платеже|Оплачено)/iu
+            );
+
+        if (!sectionMatch) {
+            return undefined;
+        }
+
+        const section =
+            this.cleanText(
+                sectionMatch[1]
+            );
+
+        /*
+         * Если нормальный заголовок таблицы сохранился,
+         * отрезаем его.
+         */
+        const headerMatch =
+            section.match(
+                /Рейс\s+Номер\s+Платформа\s+Место\s+Перевозчик/iu
+            );
+
+        let row =
+            headerMatch &&
+                headerMatch.index !== undefined
+                ? section.slice(
+                    headerMatch.index +
+                    headerMatch[0].length
+                )
+                : section;
+
+        /*
+         * Всё после "Пункт отправления" уже относится
+         * к следующей таблице.
+         */
+        const pointMarker =
+            row.search(
+                /Пункт\s+отправления/iu
+            );
+
+        if (pointMarker >= 0) {
+            row =
+                row.slice(
+                    0,
+                    pointMarker
+                );
+        }
+
+        row = this.cleanText(row);
+        if (!row) {
+            return undefined;
+        }
+
+        return this.extractOcrRouteData(row, tripPoints);
+    }
+
 }

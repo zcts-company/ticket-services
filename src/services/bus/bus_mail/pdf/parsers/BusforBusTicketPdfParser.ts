@@ -99,7 +99,8 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const passengerDocument = this.extractPassport(compactText);
         const personData = this.extractPersonData(compactText);
         const routeTable = this.extractRouteTable(lines, compactText);
-        const routeName = routeTable.routeName ?? this.findBestRouteName(lines);
+        const busTicketRouteName = this.isBusTicketPage(compactText) ? this.extractBusTicketRouteName(lines, compactText) : undefined;
+        const routeName = routeTable.routeName ?? busTicketRouteName ?? this.findBestRouteName(lines);
         const routeCities = this.splitRoute(routeName);
         const busTicketTrip = this.isBusTicketPage(compactText) ? this.extractBusTicketTripData(lines, compactText, routeCities.departureCity) : undefined;
         const itineraryPurchaseDateTime = this.findDateTimeAfterMarker(lines, /Дата покупки/i, 12);
@@ -950,6 +951,66 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
             if (match) {
                 return match[0];
             }
+        }
+
+        return undefined;
+    }
+
+    private extractBusTicketRouteName(lines: string[], compactText: string): string | undefined {
+
+        /*
+         * В новом Busfor BUS TICKET отправление присутствует
+         * в отдельной служебной строке:
+         *
+         * АС отправления: Остановка Нефтеюганск
+         * Адрес: улица Сургутская; дом 1/22
+         */
+        const departureMatch = compactText.match(/АС\s+отправления:\s*(?:Остановка\s+)?(.+?)(?=\s+Адрес:)/iu);
+        const departureCity = departureMatch?.[1] ? this.cleanText(departureMatch[1]) : undefined;
+
+        /*
+         * Пункт назначения в данном layout находится
+         * рядом с блоком ПРИБЫТИЕ / ARRIVAL:
+         *
+         * Курган - Автовокзал Курган площадь ...
+         */
+        const arrivalCity = this.extractBusTicketArrivalCity(lines);
+
+        if (!departureCity || !arrivalCity) {
+            return undefined;
+        }
+
+        return this.cleanRouteName(`${departureCity} - ${arrivalCity}`);
+    }
+
+    private extractBusTicketArrivalCity(lines: string[]): string | undefined {
+        const markerIndex = lines.findIndex((line) => /ПРИБЫТИЕ\s*\/\s*ARRIVAL/i.test(line));
+
+        if (markerIndex < 0) {
+            return undefined;
+        }
+
+        /*
+         * Пункт прибытия располагается недалеко
+         * от заголовка ARRIVAL, поэтому ограничиваем
+         * область поиска.
+         */
+        const endIndex = Math.min(lines.length, markerIndex + 20);
+        for (let index = markerIndex + 1; index < endIndex; index++) {
+            const line = this.cleanText(lines[index])
+                /*
+                 * В PDF может использоваться не обычный "-",
+                 * а длинное тире.
+                 */
+                .replace(/[‐-‒–—−]/g, "-");
+
+            /*
+             * Например:
+             *
+             * Курган - Автовокзал Курган площадь ...
+             */
+            const match = line.match(/^([\p{L}][\p{L}\s.'()-]{1,80}?)\s+-\s+(?:Автовокзал|АВ|Аэропорт|ЖД)(?=\s|$|[,.;:])/iu);
+            if (match?.[1]) { return this.cleanText(match[1]); }
         }
 
         return undefined;

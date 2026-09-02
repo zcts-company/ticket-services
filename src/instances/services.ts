@@ -46,3 +46,4 @@ export const ttBookingServer: TicketServiceServer = new TTBooking()
 export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer, ufsBusServer]
 
 export const services: TicketService[] = [traveltechZE, traveltechIT, travellineZE, yandexTaxiZE, yandexTaxiIT, pandaZE, pandaIT, busMailService]
+// export const services: TicketService[] = [busMailService]
