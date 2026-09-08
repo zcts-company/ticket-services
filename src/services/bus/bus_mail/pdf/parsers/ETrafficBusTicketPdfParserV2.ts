@@ -275,11 +275,11 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
             this.extractPassengerNameWithInitials(
                 passengerSection
             ) ??
-            this.extractPassengerNameWithInitials(
-                text
-            ) ??
             this.extractRussianFullName(
                 passengerSection
+            ) ??
+            this.extractOcrPassengerName(
+                text
             );
 
         const passengerDocument =
@@ -2367,6 +2367,11 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
         }
 
         return this.extractOcrRouteData(row, tripPoints);
+    }
+
+    private extractOcrPassengerName(text: string): string | undefined {
+        const match = text.match(/OCR_PASSENGER_NAME:\s*([А-ЯЁ][А-Яа-яЁё-]+\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.)/u);
+        return match?.[1] ? this.cleanText(match[1]) : undefined;
     }
 
 }

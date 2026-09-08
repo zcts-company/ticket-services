@@ -558,10 +558,8 @@ export class PdfAnalysisService {
 
         return [
             primaryText,
-            passengerName
-        ]
-            .filter(Boolean)
-            .join("\n");
+            `OCR_PASSENGER_NAME: ${passengerName}`
+        ].filter(Boolean).join("\n");
     }
 
     private extractPassengerNameWithInitials(text: string): string | undefined {
