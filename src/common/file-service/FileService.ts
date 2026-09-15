@@ -25,6 +25,10 @@ export class FileService {
         await fs.outputFile(path, pdfBuffer);
     }
 
+    async writeSourceFile(path: string, data: Uint8Array | Buffer): Promise<void> {
+        await this.writeBinaryFile(path, data);
+    }
+
     async createDirectory(path: string) {
         await fs.ensureDir(path);
     }

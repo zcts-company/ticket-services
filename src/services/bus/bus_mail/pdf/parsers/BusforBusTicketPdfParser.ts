@@ -139,12 +139,14 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
             departure: {
                 city: routeCities.departureCity,
+                station:routeCities.departureCity,
                 date: departureDateTime ? this.toIsoDate(departureDateTime.date) : undefined,
                 time: departureDateTime?.time
             },
 
             arrival: {
                 city: routeCities.arrivalCity,
+                station:routeCities.arrivalCity,
                 date: arrivalDate ? this.toIsoDate(arrivalDate) : undefined,
                 time: arrivalTime
             },
@@ -178,7 +180,7 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
                 agent:
                     /ООО\s+Басфор/i.test(compactText)
                         ? "ООО Басфор"
-                        : undefined,
+                        : "БАСФОР",
                 website:
                     /busfor\.ru/i.test(compactText)
                         ? "busfor.ru"
@@ -911,22 +913,93 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         };
     }
 
+    // private findDateOnLineWithText(lines: string[], searchText: string | undefined): string | undefined {
+    //     if (!searchText) {
+    //         return undefined;
+    //     }
+
+    //     const normalizedSearchText = searchText.toLowerCase();
+
+    //     for (const line of lines) {
+    //         if (!line.toLowerCase().includes(normalizedSearchText)) {
+    //             continue;
+    //         }
+
+    //         const match = line.match(/\b\d{2}\.\d{2}\.\d{4}\b/);
+
+    //         if (match) {
+    //             return match[0];
+    //         }
+    //     }
+
+    //     return undefined;
+    // }
+
     private findDateOnLineWithText(lines: string[], searchText: string | undefined): string | undefined {
+
         if (!searchText) {
             return undefined;
         }
 
-        const normalizedSearchText = searchText.toLowerCase();
+        const normalizedSearchText = this.cleanText(searchText);
 
-        for (const line of lines) {
-            if (!line.toLowerCase().includes(normalizedSearchText)) {
+        /*
+         * routeName может содержать:
+         *
+         * Автовокзал Ханты-Мансийск
+         *
+         * а фактическая строка таблицы:
+         *
+         * 16.09.2026 Ханты-Мансийск
+         *
+         * Поэтому убираем тип станции и ищем
+         * также по названию населённого пункта.
+         */
+        const simplifiedSearchText = normalizedSearchText
+            .replace(/^(?:Автовокзал|АВ|Аэропорт|Остановка|ЖД)\s+/iu, "")
+            .replace(/\s+(?:Автовокзал|АВ|Аэропорт|Остановка|ЖД)$/iu, "")
+            .trim();
+
+        const searchVariants =
+            [
+                normalizedSearchText,
+                simplifiedSearchText
+            ]
+                .filter(Boolean)
+                .map(
+                    value =>
+                        value.toLocaleLowerCase("ru")
+                );
+
+        for (const sourceLine of lines) {
+
+            const line =
+                this.cleanText(
+                    sourceLine
+                );
+
+            const normalizedLine =
+                line.toLocaleLowerCase("ru");
+
+            const matchesLocation =
+                searchVariants.some(
+                    variant =>
+                        normalizedLine.includes(
+                            variant
+                        )
+                );
+
+            if (!matchesLocation) {
                 continue;
             }
 
-            const match = line.match(/\b\d{2}\.\d{2}\.\d{4}\b/);
+            const dateMatch =
+                line.match(
+                    /\b\d{2}\.\d{2}\.\d{4}\b/
+                );
 
-            if (match) {
-                return match[0];
+            if (dateMatch) {
+                return dateMatch[0];
             }
         }
 

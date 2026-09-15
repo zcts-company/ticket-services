@@ -5,6 +5,7 @@ import { TicketService } from "../services/interfaces/TicketService.js";
 import { TicketServiceServer } from "../services/interfaces/TicketServiceServer.js";
 import travellineConfig from "../config/hotel/travelline.json" with {type: 'json'}
 import busMailConfig from "../config/bus/mailbox.json" with {type: 'json'}
+import airMailConfig from "../config/air/mailbox.json" with {type: 'json'}
 import { FileService } from "../common/file-service/FileService.js";
 import { FileConverterXml } from "../common/converter/FileConverterXml.js";
 import { Traveltech } from "../services/hotel/traveltech/Traveltech.js";
@@ -15,9 +16,11 @@ import { UfsBus } from "../services/rail/ufs-bus/Ufs.js";
 import { Yandex } from "../services/taxi/yandex/Yandex.js";
 import { BusMailService } from "../services/bus/bus_mail/BusMail.js";
 import { MailboxServiceOptions } from "../services/bus/bus_mail/types/MailboxTypes.js";
+import { AirMailService } from "../services/air/mailbox/AirMailService.js";
 
 
 const busMailOptions: MailboxServiceOptions = busMailConfig
+const airMailOptions: MailboxServiceOptions = airMailConfig
 
 
 //common instances
@@ -35,6 +38,7 @@ export const yandexTaxiZE: TicketService = new Yandex("ZE")
 export const yandexTaxiIT: TicketService = new Yandex("IT")
 
 export const busMailService: TicketService = new BusMailService(busMailOptions)
+export const airMailService:TicketService = new AirMailService(airMailOptions)
 // export const ostrovok:TicketService = new Ostrovok();
 
 //server instances
@@ -45,5 +49,5 @@ export const ttBookingServer: TicketServiceServer = new TTBooking()
 
 export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer, ufsBusServer]
 
-export const services: TicketService[] = [traveltechZE, traveltechIT, travellineZE, yandexTaxiZE, yandexTaxiIT, pandaZE, pandaIT, busMailService]
-// export const services: TicketService[] = [busMailService]
+export const services: TicketService[] = [traveltechZE, traveltechIT, travellineZE, yandexTaxiZE, yandexTaxiIT, pandaZE, pandaIT, busMailService, airMailService]
+// export const services: TicketService[] = [airMailService]
