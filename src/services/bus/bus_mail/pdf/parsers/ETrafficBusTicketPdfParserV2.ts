@@ -180,7 +180,10 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
                 /Время отправления указано местное/i
             );
 
+        const columnHeaderIdentifiers = this.extractColumnHeaderIdentifiers(lines);
+
         const receiptId =
+            columnHeaderIdentifiers?.receiptId ??
             this.extractFirstGroup(
                 text,
                 /Идентификатор квитанции\s+(\d{6,10})/i
@@ -201,6 +204,7 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
             );
 
         const ticketSeries =
+            columnHeaderIdentifiers?.ticketSeries ??
             this.extractFirstGroup(
                 text,
                 /Серия билета\s+(\d{8,15})/i
@@ -214,6 +218,7 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
             );
 
         const ticketNumber =
+            columnHeaderIdentifiers?.ticketNumber ??
             this.extractFirstGroup(
                 text,
                 /Номер билета\s+(\d{3,8})/i
@@ -2372,6 +2377,87 @@ export class ETrafficBusTicketPdfParserV2 implements BusTicketPdfParser {
     private extractOcrPassengerName(text: string): string | undefined {
         const match = text.match(/OCR_PASSENGER_NAME:\s*([А-ЯЁ][А-Яа-яЁё-]+\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.)/u);
         return match?.[1] ? this.cleanText(match[1]) : undefined;
+    }
+
+    private extractColumnHeaderIdentifiers(lines: string[]): { receiptId: string; ticketSeries: string; ticketNumber: string; } | undefined {
+        const normalizedLines = lines.map((line) => this.cleanText(line)).filter(Boolean);
+
+        const labels = [
+            /^Идентификатор квитанции$/i,
+            /^Дата покупки$/i,
+            /^Серия билета$/i,
+            /^Номер билета$/i,
+            /^Тип билета$/i,
+            /^Вид транспортного средства$/i
+        ];
+
+        /*
+         * Ищем именно последовательный блок:
+         *
+         * Идентификатор квитанции
+         * Дата покупки
+         * Серия билета
+         * Номер билета
+         * Тип билета
+         * Вид транспортного средства
+         *
+         * Это отличает новый PDF layout от старого.
+         */
+        let headerStart = -1;
+        for (let index = 0; index <= normalizedLines.length - labels.length; index++) {
+            const matches = labels.every((expression, offset) => expression.test(normalizedLines[index + offset]));
+
+            if (matches) {
+                headerStart = index; break;
+            }
+        }
+
+        if (headerStart < 0) {
+            return undefined;
+        }
+
+        /*
+         * Значения находятся после блока заголовков.
+         *
+         * Не привязываемся к позиции агента,
+         * а используем дату покупки как надёжный якорь:
+         *
+         * ГК Пять Звезд
+         * 4230329           <- dateIndex - 1
+         * 22.09.2026 16:41 <- dateIndex
+         * 27230742723       <- dateIndex + 1
+         * 3703              <- dateIndex + 2
+         */
+        const valuesStart = headerStart + labels.length;
+        const searchEnd = Math.min(normalizedLines.length, valuesStart + 15);
+        let purchaseDateIndex = -1;
+        for (let index = valuesStart; index < searchEnd; index++) {
+            if (/^\d{2}\.\d{2}\.(?:\d{2}|\d{4})\s+\d{2}:\d{2}$/.test(normalizedLines[index])) {
+                purchaseDateIndex = index;
+                break;
+            }
+        }
+
+        if (purchaseDateIndex < 0) {
+            return undefined;
+        }
+
+        const receiptId = normalizedLines[purchaseDateIndex - 1];
+        const ticketSeries = normalizedLines[purchaseDateIndex + 1];
+        const ticketNumber = normalizedLines[purchaseDateIndex + 2];
+
+        /*
+         * Важно: считаем layout успешно распознанным
+         * только если одновременно валидны ВСЕ три значения.
+         *
+         * Частичный результат здесь лучше не использовать —
+         * в этом случае отдадим управление старой логике.
+         */
+        if (!/^\d{6,10}$/.test(receiptId ?? "") || !/^\d{8,15}$/.test(ticketSeries ?? "") || !/^\d{3,8}$/.test(ticketNumber ?? "")) {
+            return undefined;
+        }
+
+        return { receiptId, ticketSeries, ticketNumber };
     }
 
 }
