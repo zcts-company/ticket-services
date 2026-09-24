@@ -1,53 +1,55 @@
 
 import pg from "pg"
-const Pool =  pg.Pool;
+const Pool = pg.Pool;
 import { HotelCache } from "../../common/cache/HotelCache.js";
 import { toDateForSQL } from "../../util/dateFunction.js";
 import { logger } from "../../common/logging/Logger.js";
 import config from "../../config/db/database.json" with {type: 'json'}
+import { getEnvNumber, getRequiredEnv } from "../../util/environment.js";
 
 export class HotelServiceDb {
 
-    private reservationCache:HotelCache;
-    private pool;
-    private currentDate:Date;
-    private checkUpdate:boolean;
+  private reservationCache: HotelCache;
+  private pool;
+  private currentDate: Date;
+  private checkUpdate: boolean;
 
-    constructor(databaseName:string, cache:HotelCache, checkUpdate:boolean){
-            this.pool = new Pool({
-                user:config.login,
-                password:config.password,
-                database:databaseName,
-                host:config.mainHost,
-                port:config.port,
-                max: 0,
-                idleTimeoutMillis: 8000,
-            }) 
-            this.reservationCache = cache; 
-            this.currentDate = new Date() 
-            this.checkUpdate = checkUpdate;
-            
-        }
+  constructor(databaseName: string, cache: HotelCache, checkUpdate: boolean) {
+    this.pool = new Pool({
+      user: getRequiredEnv("DB_USER"),
+      password: getRequiredEnv("DB_PASSWORD"),
+      database: databaseName,
+      host: getRequiredEnv("DB_HOST"),
+      port: getEnvNumber("DB_PORT", 5432),
+      max: 0,
+      idleTimeoutMillis: 8000,
+    });
 
-        async getAllReservations(){
-            this.pool.query('SELECT * FROM orders_type_hotel WHERE reservation notNull', async (err:any, res:any) => {
-                if (err) {
-                  logger.error(`[DATABASE SERVICE] ${err}`);
-                  return 'Error query';
-                }    
-                     await this.checkAndSetReservationCache(res.rows)
-                return res
-              })
+    this.reservationCache = cache;
+    this.currentDate = new Date();
+    this.checkUpdate = checkUpdate;
 
-            return this.reservationCache;  
+  }
 
-       }
+  async getAllReservations() {
+    this.pool.query('SELECT * FROM orders_type_hotel WHERE reservation notNull', async (err: any, res: any) => {
+      if (err) {
+        logger.error(`[DATABASE SERVICE] ${err}`);
+        return 'Error query';
+      }
+      await this.checkAndSetReservationCache(res.rows)
+      return res
+    })
 
-       async getReservationsByDate(dateFrom:Date, dateTo:Date){
-          let from = toDateForSQL(dateFrom)
-          let to = toDateForSQL(dateTo)
+    return this.reservationCache;
 
-        const query:string = `SELECT o.id,
+  }
+
+  async getReservationsByDate(dateFrom: Date, dateTo: Date) {
+    let from = toDateForSQL(dateFrom)
+    let to = toDateForSQL(dateTo)
+
+    const query: string = `SELECT o.id,
                                      o.locator,
                                      o.updated,
                                      h.reservation
@@ -56,63 +58,63 @@ export class HotelServiceDb {
                               WHERE o.${this.checkUpdate ? 'updated' : 'created'} > '${from}' AND o.${this.checkUpdate ? 'updated' : 'created'} < '${to}' 
                               AND h.reservation notNull and o.service = '${config.service.name}' 
                               AND h.reservation ->>'provider' like '%${this.reservationCache.getProviderName()}%'`
-        logger.trace(`[DATABASE SERVICE] Starting query for database. QUERY: ${query}`)
-        try {
-          this.pool.query(query, async (err:any, res:any) => {
-              if (err) {
-                logger.error(`[DATABASE SERVICE] ${err}`)
-                return 'Error query';
-              } else {
-                logger.trace(`[DATABASE SERVICE] succsess query: rows ${res.rows.length}`)
-                
-              }    
-              
-              this.checkDate(dateFrom)
-                   
-              
-              await this.checkAndSetReservationCache(res.rows)
-              
-              return res
-            })
-        } catch (error:any) {
-            logger.error(`[DATABASE SERVICE] error: ${error.getMessage()}`)
+    logger.trace(`[DATABASE SERVICE] Starting query for database. QUERY: ${query}`)
+    try {
+      this.pool.query(query, async (err: any, res: any) => {
+        if (err) {
+          logger.error(`[DATABASE SERVICE] ${err}`)
+          return 'Error query';
+        } else {
+          logger.trace(`[DATABASE SERVICE] succsess query: rows ${res.rows.length}`)
+
         }
 
-        return this.reservationCache;       
+        this.checkDate(dateFrom)
 
+
+        await this.checkAndSetReservationCache(res.rows)
+
+        return res
+      })
+    } catch (error: any) {
+      logger.error(`[DATABASE SERVICE] error: ${error.getMessage()}`)
     }
 
-    private checkDate(dateFrom:Date){
-      
-      if(this.currentDate < dateFrom){ 
-            this.currentDate = new Date(dateFrom);
+    return this.reservationCache;
+
+  }
+
+  private checkDate(dateFrom: Date) {
+
+    if (this.currentDate < dateFrom) {
+      this.currentDate = new Date(dateFrom);
+    }
+
+  }
+
+  private async checkAndSetReservationCache(rows: any[]) {
+    let count: number = 0;
+    rows.forEach((row) => {
+      // добавляем в кэш сервиса только записи из базы у который provider равен имени сервиса из config
+      if (row.reservation.provider.includes(this.reservationCache.getProviderName())) {
+        logger.trace(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider}`)
+        if (row.reservation.locator) {
+          logger.trace(`[DATABASE SERVICE] recived reservation from database with locator: ${row.reservation.locator}`)
+          const reservation = this.reservationCache.getItem(row.reservation.locator);
+          if (!reservation || (row.updated > reservation.updated)) {
+            logger.info(`[DATABASE SERVICE] start adding process for new reeservation to cache. Locator: ${row.reservation.locator}`)
+            this.reservationCache.addToCache(row.reservation.locator, row)
+            count++;
+            logger.info(`[DATABASE SERVICE] finish adding process process for new reeservation to cache. Locator: ${row.reservation.locator}`)
+          }
+        }
+
+      } else {
+        logger.trace(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider} for service ${this.reservationCache.getProviderName()}`)
       }
 
-    }
+    })
+    logger.trace(`[DATABASE SERVICE] Date: ${toDateForSQL(this.currentDate)}. Rows from database ${rows.length} setting to cache ${count} reservation`);
+  }
 
-    private async checkAndSetReservationCache(rows:any[]){
-            let count:number = 0;
-            rows.forEach((row) => {
-              // добавляем в кэш сервиса только записи из базы у который provider равен имени сервиса из config
-              if(row.reservation.provider.includes(this.reservationCache.getProviderName())){
-                logger.trace(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider}`)
-                if(row.reservation.locator){
-                  logger.trace(`[DATABASE SERVICE] recived reservation from database with locator: ${row.reservation.locator}`)
-                  const reservation = this.reservationCache.getItem(row.reservation.locator);
-                    if(!reservation || (row.updated > reservation.updated) ){
-                      logger.info(`[DATABASE SERVICE] start adding process for new reeservation to cache. Locator: ${row.reservation.locator}`)
-                        this.reservationCache.addToCache(row.reservation.locator,row)
-                        count++;
-                        logger.info(`[DATABASE SERVICE] finish adding process process for new reeservation to cache. Locator: ${row.reservation.locator}`)
-                    }
-                }
-
-              } else {
-                  logger.trace(`[DATABASE SERVICE] recived reservation from database of provider: ${row.reservation.provider} for service ${this.reservationCache.getProviderName()}`)
-              }
-               
-            })
-            logger.trace(`[DATABASE SERVICE] Date: ${toDateForSQL(this.currentDate)}. Rows from database ${rows.length} setting to cache ${count} reservation`);         
-        }
-
-    }
+}

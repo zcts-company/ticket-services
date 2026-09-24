@@ -9,7 +9,7 @@
     "start_test": "node --experimental-specifier-resolution=node  --loader ts-node/esm ./server_task/server.ts",
     "build_old": "tsc --build",
     "startprod": "node ./build/app.js | npx pino-pretty",
-    "debug": "node --inspect=9229 --enable-source-maps build/app.js",
+    "debug": "node --env-file=.env --inspect=9229 --enable-source-maps build/app.js",
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json -w",
     "start": "node --enable-source-maps build/app.js"
