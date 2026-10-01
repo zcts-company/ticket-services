@@ -17,7 +17,7 @@ export interface BusTicketPdfParser {
     readonly version: string;
 
     detect(analysis: PdfAnalysisResult): PdfParserDetection;
-    parse(analysis: PdfAnalysisResult, detection: PdfParserDetection): ParsedBusTicketDocument;
+    parse(analysis: PdfAnalysisResult, detection: PdfParserDetection, documentAnalysis?: PdfAnalysisResult): ParsedBusTicketDocument;
     /**
      * Позволяет конкретному парсеру выбрать страницы,
      * которые должны рассматриваться как билеты.

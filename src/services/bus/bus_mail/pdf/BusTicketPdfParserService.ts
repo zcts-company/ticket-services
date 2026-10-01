@@ -37,7 +37,7 @@ export class BusTicketPdfParserService {
      * только одного билета или одной страницы.
      */
 
-    parse(analysis: PdfAnalysisResult): ParsedBusTicketDocument {
+    parse(analysis: PdfAnalysisResult, documentAnalysis?: PdfAnalysisResult): ParsedBusTicketDocument {
         const detectedParsers: DetectedParser[] = this.parsers
             .map((parser) => ({ parser, detection: parser.detect(analysis) }))
             .sort((first, second) => second.detection.confidence - first.detection.confidence);
@@ -63,7 +63,7 @@ export class BusTicketPdfParserService {
 
         for (const { parser, detection } of supportedParsers) {
             try {
-                return parser.parse(analysis, detection);
+                return parser.parse(analysis, detection, documentAnalysis);
             } catch (error: unknown) {
                 parserErrors.push(`${parser.id} ` + `(confidence: ${detection.confidence}): ` + this.getErrorMessage(error));
             }
@@ -95,7 +95,7 @@ export class BusTicketPdfParserService {
             const pageAnalysis = this.createPageAnalysis(analysis, page);
 
             try {
-                const parsedDocument = this.parse(pageAnalysis);
+                const parsedDocument = this.parse(pageAnalysis, analysis);
                 result.push(parsedDocument);
             } catch (error: unknown) {
                 const errorMessage = this.getErrorMessage(error);

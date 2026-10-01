@@ -85,11 +85,20 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         };
     }
 
-    parse(analysis: PdfAnalysisResult, detection: PdfParserDetection): ParsedBusTicketDocument {
+    parse(analysis: PdfAnalysisResult, detection: PdfParserDetection, documentAnalysis?: PdfAnalysisResult): ParsedBusTicketDocument {
+        /*
+        * analysis — выбранная страница, которую будем передавать дальше.
+        * Для двухстраничного Busfor это page 2.
+        *
+        * documentAnalysis — исходный PDF целиком.
+        * Из него можем добрать данные первой страницы,
+        * не передавая её дальше.
+        */
         const lines = analysis.lines.map((line) => this.cleanText(line)).filter(Boolean);
-
         const compactText = this.compact(analysis.normalizedText);
-        const itineraryNumbers = this.extractItineraryNumbers(compactText);
+        const documentText = this.compact(documentAnalysis?.normalizedText ?? analysis.normalizedText);
+        const documentLines = (documentAnalysis?.lines ?? analysis.lines).map((line) => this.cleanText(line)).filter(Boolean);
+        const itineraryNumbers = this.extractItineraryNumbers(compactText) ?? this.extractItineraryNumbers(documentText);
         const carrierTicketNumber = this.extractFirstGroup(compactText, /BUS TICKET\s*№\s*(\d+)/i);
         const controlNumber = this.extractControlNumber(compactText, itineraryNumbers);
 
@@ -99,6 +108,7 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const passengerDocument = this.extractPassport(compactText);
         const personData = this.extractPersonData(compactText);
         const routeTable = this.extractRouteTable(lines, compactText);
+        const documentRouteTable = documentAnalysis ? this.extractRouteTable(documentLines, documentText) : routeTable;
         const busTicketRouteName = this.isBusTicketPage(compactText) ? this.extractBusTicketRouteName(lines, compactText) : undefined;
         const routeName = routeTable.routeName ?? busTicketRouteName ?? this.findBestRouteName(lines);
         const routeCities = this.splitRoute(routeName);
@@ -109,19 +119,36 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const departureDateTime = busTicketTrip?.departure ?? this.findDateTimeAfterMarker(lines, /^Отправление$/i, 40) ?? this.findDepartureDateTime(allDateTimes, itineraryPurchaseDateTime, carrierSaleDateTime);
         const arrivalDate = busTicketTrip?.arrival?.date ?? this.extractArrivalDate(lines, compactText, departureDateTime, itineraryPurchaseDateTime);
         const arrivalTime = busTicketTrip?.arrival?.time ?? this.extractArrivalTime(lines, compactText, departureDateTime, itineraryPurchaseDateTime, carrierSaleDateTime);
-        const carrierName = this.findFullNameAfterMarker(lines, /ПЕРЕВОЗЧИК|CARRIER/i);
-        const ticketType = this.findValueAfterMarker(lines, /^Тип билета$/i, (value) => /^(Полный|Детский|Льготный)$/i.test(value), 10);
-        const vehicleType = this.findValueAfterMarker(lines, /^Вид транспортного средства$/i, (value) => /\bавтобус\b/i.test(value), 10);
+        const carrierName = this.extractCarrierName(lines);
+        // const ticketType = this.findValueAfterMarker(lines, /^Тип билета$/i, (value) => /^(Полный|Детский|Льготный)$/i.test(value), 10);
+        const ticketType = this.extractFirstGroup(documentText, /Тип билета\s+(Полный|Детский|Льготный)/i);
+        const vehicleType = this.extractFirstGroup(documentText, /Вид транспортного средства\s+(.+?)(?=\s+Агент|\s+Дата покупки|\s+Информация о пассажире)/i);
         const itineraryTotal = this.findMoneyAfterMarker(lines, /Итого сумма платежа/i, 8);
-        const fareComponents = this.extractFareComponents(compactText);
-        const baseFare = fareComponents.find((component) => component.code === "ТАРИФ")?.amount ??
-            this.findMoneyAfterMarker(lines, /^Тариф$/i, 12);
+        // const fareComponents = this.extractFareComponents(compactText);
+        // const baseFare = fareComponents.find((component) => component.code === "ТАРИФ")?.amount ??
+        //     this.findMoneyAfterMarker(lines, /^Тариф$/i, 12);
 
         const allMoneyValues = this.extractMoneyValues(compactText);
         const carrierTicketTotal = allMoneyValues.length > 0
             ? Math.max(...allMoneyValues)
             : undefined;
 
+        const baseFare = this.findMoneyAfterMarker(lines, /РАСЧЕТ СТОИМОСТИ|FARE CALCULATION/i, 5);
+        const charge = carrierTicketTotal !== undefined && baseFare !== undefined ? this.roundMoney(carrierTicketTotal - baseFare) : undefined;
+        const vat = this.extractVat(lines);
+        const fareComponents: BusTicketPriceComponent[] = [];
+
+        if (baseFare !== undefined) {
+            fareComponents.push({ code: "FARE", amount: baseFare, currency: "RUB" });
+        }
+
+        if (charge !== undefined && charge > 0) {
+            fareComponents.push({ code: "COMMISSION", amount: charge, currency: "RUB" });
+        }
+
+        if (vat !== undefined) {
+            fareComponents.push({ code: "VAT", amount: vat, currency: "RUB" });
+        }
         const currency = /\bRUB\b/i.test(compactText)
             ? "RUB"
             : undefined;
@@ -133,20 +160,20 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
         const trip: BusTicketTrip = {
             routeName,
-            tripNumber: routeTable.tripNumber,
-            seat: busTicketTrip?.seat ?? routeTable.seat,
-            platform: busTicketTrip?.platform ?? routeTable.platform,
+            tripNumber: routeTable.tripNumber ?? documentRouteTable.tripNumber,
+            seat: busTicketTrip?.seat ?? routeTable.seat ?? documentRouteTable.tripNumber,
+            platform: busTicketTrip?.platform ?? routeTable.platform ?? documentRouteTable.tripNumber,
 
             departure: {
                 city: routeCities.departureCity,
-                station:routeCities.departureCity,
+                station: routeCities.departureCity,
                 date: departureDateTime ? this.toIsoDate(departureDateTime.date) : undefined,
                 time: departureDateTime?.time
             },
 
             arrival: {
                 city: routeCities.arrivalCity,
-                station:routeCities.arrivalCity,
+                station: routeCities.arrivalCity,
                 date: arrivalDate ? this.toIsoDate(arrivalDate) : undefined,
                 time: arrivalTime
             },
@@ -177,14 +204,8 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
             provider: {
                 name: "BUSFOR",
-                agent:
-                    /ООО\s+Басфор/i.test(compactText)
-                        ? "ООО Басфор"
-                        : "БАСФОР",
-                website:
-                    /busfor\.ru/i.test(compactText)
-                        ? "busfor.ru"
-                        : undefined
+                agent: 'ООО "БАСФОР"',
+                website: "busfor.ru"
             },
 
             identifiers: {
@@ -272,17 +293,67 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
     }
 
-    private extractItineraryNumbers(text: string): { itinerarySeries: string; itineraryNumber: string; } | undefined {
-        const match = text.match(/\b(\d{8,12})\s*\/\s*(\d{5,10})\b/);
+    private extractItineraryNumbers(
+        text: string
+    ): {
+        itinerarySeries: string;
+        itineraryNumber: string;
+    } | undefined {
 
-        if (!match) {
-            return undefined;
+        /*
+         * Первая страница:
+         *
+         * 4501984501 / 1042803
+         */
+        const slashMatch = text.match(
+            /\b(\d{8,12})\s*\/\s*(\d{5,10})\b/
+        );
+
+        if (slashMatch) {
+            return {
+                itinerarySeries: slashMatch[1],
+                itineraryNumber: slashMatch[2]
+            };
         }
 
-        return {
-            itinerarySeries: match[1],
-            itineraryNumber: match[2]
-        };
+        /*
+         * Вторая страница:
+         *
+         * 4501984501 1042803
+         *
+         * В текстовом слое значения могут находиться
+         * ДО заголовка CHECK NUMBER.
+         */
+        const beforeCheckNumberMatch = text.match(
+            /\b(\d{8,12})\s+(\d{5,10})\b(?=[\s\S]{0,250}КОНТРОЛЬНЫЙ\s+НОМЕР\s*\/\s*CHECK\s+NUMBER)/i
+        );
+
+        if (beforeCheckNumberMatch) {
+            return {
+                itinerarySeries:
+                    beforeCheckNumberMatch[1],
+                itineraryNumber:
+                    beforeCheckNumberMatch[2]
+            };
+        }
+
+        /*
+         * И обратный порядок text layer тоже поддерживаем.
+         */
+        const afterCheckNumberMatch = text.match(
+            /КОНТРОЛЬНЫЙ\s+НОМЕР\s*\/\s*CHECK\s+NUMBER[\s\S]{0,250}?\b(\d{8,12})\s+(\d{5,10})\b/i
+        );
+
+        if (afterCheckNumberMatch) {
+            return {
+                itinerarySeries:
+                    afterCheckNumberMatch[1],
+                itineraryNumber:
+                    afterCheckNumberMatch[2]
+            };
+        }
+
+        return undefined;
     }
 
     private extractControlNumber(text: string, itineraryNumbers: | { itinerarySeries: string; itineraryNumber: string; } | undefined): string | undefined {
@@ -1087,6 +1158,50 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         }
 
         return undefined;
+    }
+
+    private extractCarrierName(lines: string[]): string | undefined {
+        const markerIndex = lines.findIndex((line) => /ПЕРЕВОЗЧИК\s*\/\s*CARRIER/i.test(line));
+
+        if (markerIndex < 0) {
+            return undefined;
+        }
+
+        const endIndex = Math.min(lines.length, markerIndex + 30);
+        for (let index = markerIndex + 1; index < endIndex; index++) {
+            const line = this.cleanText(lines[index]);
+            const match = line.match(/((?:ООО|АО|ПАО|ИП)\s+["«][^"»]+["»])/iu);
+
+            if (match?.[1]) {
+                return this.cleanText(match[1]);
+            }
+        }
+
+        return undefined;
+    }
+
+    private extractVat(lines: string[]): number | undefined {
+
+        const markerIndex = lines.findIndex((line) => /НДС\s*\/\s*TAX/i.test(line));
+        if (markerIndex < 0) {
+            return undefined;
+        }
+
+        const endIndex = Math.min(lines.length, markerIndex + 15);
+
+        for (let index = markerIndex; index < endIndex; index++) {
+            const values = this.extractMoneyValues(lines[index]);
+
+            if (values.length > 0) {
+                return values[0];
+            }
+        }
+
+        return undefined;
+    }
+
+    private roundMoney(value: number): number {
+        return Math.round(value * 100) / 100;
     }
 
 }
