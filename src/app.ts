@@ -44,21 +44,49 @@ callBackServices.forEach(callbackService => {
     callbackService.startServer()
 })
 
-setInterval(() => {
-    counter++;
-    time += 10000;
-    if (Date.now() > dateTo.getTime()) {
-        logger.info(`[MAIN APP] start process of changing the current date`)
-        setSearchDate()
-    } else {
-        logger.trace(`[MAIN APP] current date not need changing`)
+let isRunning = false;
+
+setInterval(async () => {
+    if (isRunning) {
+        logger.warn('[MAIN APP] Previous iteration is still running. Skipping.');
+        return;
     }
 
-    services.forEach(async (service: TicketService) => {
-        logger.trace(`[MAIN APP] Step number ${counter} [service name ${service.getServiceName()}]`)
-        service.run(dateFrom, dateTo);
-    })
-}, config.main.interval * 1000)
+    isRunning = true;
+
+    try {
+        counter++;
+        time += config.main.interval * 1000;
+
+        if (Date.now() > dateTo.getTime()) {
+            logger.info('[MAIN APP] Start process of changing the current date');
+            setSearchDate();
+        } else {
+            logger.trace('[MAIN APP] Current date does not need changing');
+        }
+
+        const currentDateFrom = new Date(dateFrom);
+        const currentDateTo = new Date(dateTo);
+
+        const results = await Promise.allSettled(
+            services.map(service => {
+                logger.trace(`[MAIN APP] Step number ${counter} [service name ${service.getServiceName()}]`);
+                return service.run(currentDateFrom, currentDateTo);
+            })
+        );
+
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                logger.error(`[MAIN APP] Service ${services[index].getServiceName()} failed: ${String(result.reason)}`);
+            }
+        });
+
+    } catch (error) {
+        logger.error(`[MAIN APP] Scheduler error: ${String(error)}`);
+    } finally {
+        isRunning = false;
+    }
+}, config.main.interval * 1000);
 
 function setSearchDate() {
     const now = new Date()
