@@ -11,12 +11,13 @@ import { nameOfFile } from "../../../../util/fileFunction.js";
 import { HandCheckReservation } from "../../../../common/types/HandCheckReservation.js";
 import { createHttpError } from "../../../../util/errorFunction.js";
 import { ProfileType } from "../../../../common/types/ProfileType.js";
-import { HotelInfoServiceDb } from "../../../database/HotelInfoServiceDb.js";
+import { TravellineContentService } from "../web-service/TravellineContentService.js";
 import { HotelInfo } from "../types/HotelInfo.js";
 
 export const loadService = express.Router();
 
 const webService = new TravellineWebService();
+const hotelInfo = new TravellineContentService();
 
 
 loadService.post('/load',asyncHandler( 
@@ -34,7 +35,6 @@ loadService.post('/load',asyncHandler(
     }
     
     const transportService:TravellineTransport = new TravellineTransport(request.profile);
-    const hotelInfo = new HotelInfoServiceDb(config[request.profile].database.hotels)
 
     logger.trace(`[TRAVELLINE] Resived post request for hand check reservation file for locator: ${request.locator}`);
 
@@ -42,7 +42,7 @@ loadService.post('/load',asyncHandler(
     const updated = new Date();
 
     if(reservation){
-        const hotel:HotelInfo[] = await hotelInfo.getHotelInfo(reservation.booking.propertyId,config[request.profile].nameProvider)
+        const hotel:HotelInfo[] = await hotelInfo.getHotelInfo(reservation.booking.propertyId,request.profile)
         if(hotel.length === 1){
           logger.info(`[TRAVELLINE] Set hotel to reservation ${reservation.booking.number}: ${hotel[0].hotel_name}`);
           reservation.hotelInfo = hotel[0]

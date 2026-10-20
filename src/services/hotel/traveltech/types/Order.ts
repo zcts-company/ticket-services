@@ -1,4 +1,4 @@
-import { Client } from "pg";
+import { Client } from "./response/Client.js";
 import { Guest } from "./response/Guest.js";
 
 export type Order = {

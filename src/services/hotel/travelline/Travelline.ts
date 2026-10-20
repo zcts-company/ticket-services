@@ -2,7 +2,8 @@
 import { HotelCache } from "../../../common/cache/HotelCache.js";
 import { fileConverterXml, fileService, hotelCacheTravelline} from "../../../instances/services.js";
 import { toDateForSQL } from "../../../util/dateFunction.js";
-import { HotelServiceDb } from "../../database/HotelServiceDb.js";
+import { HotelBookingsService } from "../../integration/HotelBookingsService.js";
+import { CorporateApiClient } from "../../integration/CorporateApiClient.js";
 import { HotelService } from "../interfaces/HotelService.js";
 import { HotelWebService } from "../interfaces/HotelWebService.js";
 import { TravellineTransport } from "./transport-service/TravellineTransport.js";
@@ -14,13 +15,13 @@ import mainConf from "../../../config/main-config.json" with {type: 'json'}
 import { nameOfFile } from "../../../util/fileFunction.js";
 import { replaceSymbols } from "../../../util/stringFunction.js";
 import { ProfileType } from "../../../common/types/ProfileType.js";
-import { HotelInfoServiceDb } from "../../database/HotelInfoServiceDb.js";
+import { TravellineContentService } from "./web-service/TravellineContentService.js";
 import { HotelInfo } from "./types/HotelInfo.js";
 
 export class Travelline implements HotelService{
 
-    private database:HotelServiceDb
-    private hotelInfoDB:HotelInfoServiceDb
+    private database:HotelBookingsService
+    private hotelInfo:TravellineContentService
     private webService:HotelWebService
     private transportService:TravellineTransport;
     private currentDirectory:string
@@ -33,8 +34,8 @@ export class Travelline implements HotelService{
 
     constructor(profile:ProfileType){
         this.profile = profile
-        this.database = new HotelServiceDb(config[this.profile].database.orders,hotelCacheTravelline,config[this.profile].checkUpdates);
-        this.hotelInfoDB = new HotelInfoServiceDb(config[this.profile].database.hotels)
+        this.database = new HotelBookingsService(new CorporateApiClient(),hotelCacheTravelline,config[this.profile].checkUpdates);
+        this.hotelInfo = new TravellineContentService()
         this.webService = new TravellineWebService();
         this.transportService = new TravellineTransport(profile)
         this.currentDirectory = config[this.profile].fileOutput.mainPath
@@ -114,7 +115,7 @@ export class Travelline implements HotelService{
             const reservation:any = listReservation.get(key);
             const locator:string = reservation.reservation.locator;
             const reservationData:BookingResponse = await this.webService.getOrder(locator,this.profile);
-            const hotel:HotelInfo[] = await this.hotelInfoDB.getHotelInfo(reservationData.booking.propertyId,config[this.profile].nameProvider)
+            const hotel:HotelInfo[] = await this.hotelInfo.getHotelInfo(reservationData.booking.propertyId,this.profile)
                 
                 if(hotel.length === 1){
                     reservationData.hotelInfo = hotel[0]
