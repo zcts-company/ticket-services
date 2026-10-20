@@ -1,13 +1,18 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-ENV TZ="Europe/Moscow"
+ENV TZ=Europe/Moscow
 
-COPY ./build /build 
-COPY ./package.json /package.json 
-COPY ./package-lock.json /package-lock.json
+WORKDIR /
 
-RUN apk add samba-client
-RUN npm install  
+RUN apk add --no-cache \
+    samba-client \
+    tzdata \
+    ca-certificates
 
+COPY package.json package-lock.json ./
 
-CMD ["npm","run","startprod"]
+RUN npm ci --omit=dev
+
+COPY ./build /build
+
+CMD ["npm", "run", "startprod"]

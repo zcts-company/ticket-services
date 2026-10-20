@@ -17,6 +17,7 @@ import { Yandex } from "../services/taxi/yandex/Yandex.js";
 import { BusMailService } from "../services/bus/bus_mail/BusMail.js";
 import { MailboxServiceOptions } from "../services/bus/bus_mail/types/MailboxTypes.js";
 import { AirMailService } from "../services/air/mailbox/AirMailService.js";
+import { SmartTravel } from "../services/rail/smartTravel/SmartTravel.js";
 
 
 const busMailOptions: MailboxServiceOptions = busMailConfig
@@ -44,10 +45,11 @@ export const airMailService:TicketService = new AirMailService(airMailOptions)
 //server instances
 export const nemoTavelServer: TicketServiceServer = new Nemo();
 export const ufsServer: TicketServiceServer = new Ufs()
+export const smartTravel: TicketServiceServer = new SmartTravel()
 export const ufsBusServer: TicketServiceServer = new UfsBus()
 export const ttBookingServer: TicketServiceServer = new TTBooking()
 
-export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer, ufsBusServer]
+export const callBackServices: TicketServiceServer[] = [nemoTavelServer, ufsServer, ttBookingServer, ufsBusServer, smartTravel]
 
 export const services: TicketService[] = [traveltechZE, traveltechIT, travellineZE, yandexTaxiZE, yandexTaxiIT, pandaZE, pandaIT, busMailService, airMailService]
 // export const services: TicketService[] = [airMailService]

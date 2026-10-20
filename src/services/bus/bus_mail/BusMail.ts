@@ -70,7 +70,25 @@ export class BusMailService implements BusTicketService {
             const result = await this.processMailbox(client);
             logger.trace(`[${this.getServiceName()}] Mailbox processing completed. ` + `Found: ${result.found}, ` + `processed: ${result.processed}, ` + `deleted: ${result.deleted}, ` + `failed: ${result.failed}`);
         } catch (error: unknown) {
-            logger.error(`[${this.getServiceName()}] Mailbox processing skipped. ` + `Error: ${this.getErrorMessage(error)}`)
+            const err = error as Error & {
+                code?: string;
+                response?: string;
+                responseText?: string;
+                responseStatus?: string;
+                executedCommand?: string;
+                serverResponseCode?: string;
+            };
+
+            logger.error(
+                `[${this.getServiceName()}] Mailbox processing failed. ` +
+                `Message: ${err?.message ?? String(error)}; ` +
+                `Code: ${err?.code ?? "unknown"}; ` +
+                `Command: ${err?.executedCommand ?? "unknown"}; ` +
+                `Response: ${err?.responseText ?? err?.response ?? "unknown"}; ` +
+                `ResponseStatus: ${err?.responseStatus ?? "unknown"}; ` +
+                `ServerResponseCode: ${err?.serverResponseCode ?? "unknown"}; ` +
+                `Stack: ${err?.stack ?? "unknown"}`
+            );
         }
         finally {
             await this.disconnect(client);
@@ -87,17 +105,15 @@ export class BusMailService implements BusTicketService {
             auth: {
                 user: this.options.username,
                 pass: this.options.password,
-                loginMethod: 'AUTH=PLAIN'
+                loginMethod: "AUTH=PLAIN"
             },
             tls: {
-                minVersion: 'TLSv1'
+                minVersion: "TLSv1",
+                ciphers: "DEFAULT@SECLEVEL=0"
             },
-            connectionTimeout:
-                this.options.connectionTimeout ?? 30_000,
-            greetingTimeout:
-                this.options.greetingTimeout ?? 30_000,
-            socketTimeout:
-                this.options.socketTimeout ?? 300_000,
+            connectionTimeout: this.options.connectionTimeout ?? 30_000,
+            greetingTimeout: this.options.greetingTimeout ?? 30_000,
+            socketTimeout: this.options.socketTimeout ?? 300_000,
             logger: false
         });
 

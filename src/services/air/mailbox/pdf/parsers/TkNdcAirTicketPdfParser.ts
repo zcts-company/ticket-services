@@ -1058,10 +1058,7 @@ export class TkNdcAirTicketPdfParser
 
 
                 if (
-                    /\b\d{12,14}\b.*\b[A-Z]{3}\b/i
-                        .test(
-                            section[next]
-                        )
+                    /\b\d{12,14}\b/.test(section[next])
                 ) {
                     break;
                 }
@@ -1096,112 +1093,71 @@ export class TkNdcAirTicketPdfParser
     }
 
 
+
     private parsePassengerBlock(
         block: string[]
     ): TkPassengerData | undefined {
+        const text = block.join(" ");
 
-        const text =
-            block.join(" ");
-
-
-        /*
-         * Mr. Oleg KIM Adult 11 Jul, 1990 ...
-         */
-        const passengerMatch =
-            text.match(
-                /^(Mr|Mrs|Ms|Miss|Mstr|Dr)\.?\s+(.+?)\s+(Adult|Child|Infant)\s+(\d{1,2}\s+[A-Za-z]{3},\s+\d{4})\b/i
-            );
-
+        const passengerMatch = text.match(
+            /^(Mr|Mrs|Ms|Miss|Mstr|Dr)\.?\s+(.+?)\s+(Adult|Child|Infant)\s+(\d{1,2}\s+[A-Za-z]{3},\s+\d{4})\b/i
+        );
 
         if (!passengerMatch) {
             return undefined;
         }
 
-
-        /*
-         * 2352242811471 RUB 86,520.00
-         */
-        const ticketMatch =
-            text.match(
-                /\b(\d{12,14})\s+([A-Z]{3})\s+([\d,.]+)/i
-            );
-
+        // Номер билета обязателен, стоимость и валюта — нет.
+        const ticketMatch = text.match(
+            /\b(\d{12,14})(?:\s+([A-Z]{3})\s+([\d,.]+))?\b/i
+        );
 
         if (!ticketMatch) {
             return undefined;
         }
 
+        const title = `${passengerMatch[1]}.`;
+        const name = passengerMatch[2];
 
-        const title =
-            `${passengerMatch[1]}.`;
+        const nameParts = name
+            .split(/\s+/)
+            .filter(Boolean);
 
-        const name =
-            passengerMatch[2];
+        const email = text.match(
+            /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+        )?.[0];
 
-        const nameParts =
-            name
-                .split(/\s+/)
-                .filter(Boolean);
-
-
-        const email =
-            text.match(
-                /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-            )?.[0];
-
-
-        const phone =
-            text.match(
-                /\+\d{7,15}\b/
-            )?.[0];
-
+        const phone = text.match(
+            /\+\d{7,15}\b/
+        )?.[0];
 
         return {
             passenger: {
-                fullName:
-                    `${title} ${name}`,
-
+                fullName: `${title} ${name}`,
                 title,
-
-                firstName:
-                    nameParts[0],
-
-                lastName:
-                    nameParts.length > 1
-                        ? nameParts
-                            .slice(1)
-                            .join(" ")
-                        : undefined,
-
-                type:
-                    this.mapPassengerType(
-                        passengerMatch[3]
-                    ),
-
-                birthDate:
-                    this.toIsoEnglishDate(
-                        passengerMatch[4]
-                    ),
-
+                firstName: nameParts[0],
+                lastName: nameParts.length > 1
+                    ? nameParts.slice(1).join(" ")
+                    : undefined,
+                type: this.mapPassengerType(
+                    passengerMatch[3]
+                ),
+                birthDate: this.toIsoEnglishDate(
+                    passengerMatch[4]
+                ),
                 contact: {
                     phone,
                     email
                 }
             },
-
-            ticketNumber:
-                ticketMatch[1],
-
-            currency:
-                ticketMatch[2]
-                    .toUpperCase(),
-
-            price:
-                this.toMoney(
-                    ticketMatch[3]
-                )
+            ticketNumber: ticketMatch[1],
+            currency: ticketMatch[2]?.toUpperCase(),
+            price: ticketMatch[3]
+                ? this.toMoney(ticketMatch[3])
+                : undefined
         };
     }
+
 
 
     private mapPassengerType(

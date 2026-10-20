@@ -7,6 +7,7 @@ import { routerPanda } from "../services/hotel/panda/router/RouterPanda.js";
 import { routerTTBooking } from "../services/air/ttbooking/router/RouterTTBooking.js";
 import { routerUfsBus } from "../services/rail/ufs-bus/router/RouterUfsBus.js";
 import { routerYandex } from "../services/taxi/yandex/router/RouterYandex.js";
+import { routerSmartTravel } from "../services/rail/smartTravel/router/RouterUfs.js";
 
 export const mainRouter = express.Router();
 
@@ -18,3 +19,4 @@ mainRouter.use('/nemo',routerNemo)
 mainRouter.use('/ufs',routerUfs)
 mainRouter.use('/ufs-bus',routerUfsBus)
 mainRouter.use('/ttbooking',routerTTBooking)
+mainRouter.use('/smart-travel',routerSmartTravel)

@@ -1,3 +1,4 @@
+import { logger } from "../../../../../common/logging/Logger.js";
 import { BusTicketPaymentMethod, BusTicketPriceComponent, BusTicketTrip, ParsedBusTicketDocument } from "../types/BusTicketTypes.js";
 import { PdfAnalysisResult } from "../types/PdfTypes.js";
 import { BusTicketPdfParser, PdfParserDetection } from "./interface/BusTicketPdfParser.js";
@@ -96,8 +97,9 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         */
         const lines = analysis.lines.map((line) => this.cleanText(line)).filter(Boolean);
         const compactText = this.compact(analysis.normalizedText);
-        const documentText = this.compact(documentAnalysis?.normalizedText ?? analysis.normalizedText);
-        const documentLines = (documentAnalysis?.lines ?? analysis.lines).map((line) => this.cleanText(line)).filter(Boolean);
+        const ticketContext = this.getTicketDocumentContext(analysis, documentAnalysis);
+        const documentText = this.compact(ticketContext.normalizedText);
+        const documentLines = ticketContext.lines.map((line) => this.cleanText(line)).filter(Boolean);
         const itineraryNumbers = this.extractItineraryNumbers(compactText) ?? this.extractItineraryNumbers(documentText);
         const carrierTicketNumber = this.extractFirstGroup(compactText, /BUS TICKET\s*№\s*(\d+)/i);
         const controlNumber = this.extractControlNumber(compactText, itineraryNumbers);
@@ -110,15 +112,33 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const routeTable = this.extractRouteTable(lines, compactText);
         const documentRouteTable = documentAnalysis ? this.extractRouteTable(documentLines, documentText) : routeTable;
         const busTicketRouteName = this.isBusTicketPage(compactText) ? this.extractBusTicketRouteName(lines, compactText) : undefined;
-        const routeName = routeTable.routeName ?? busTicketRouteName ?? this.findBestRouteName(lines);
+        const routeName =
+            (
+                this.isBusTicketPage(compactText)
+                    ? this.extractBusTicketRouteFromMarkers(lines)
+                    : undefined
+            ) ??
+            routeTable.routeName ??
+            busTicketRouteName ??
+            this.findBestRouteName(lines);
+
+        if (!routeName) {
+            logger.warn(
+                `[BUSFOR PARSER] Route not found. ` +
+                `File: ${analysis.filename}; ` +
+                `Lines: ${JSON.stringify(lines)}`
+            );
+        }
         const routeCities = this.splitRoute(routeName);
         const busTicketTrip = this.isBusTicketPage(compactText) ? this.extractBusTicketTripData(lines, compactText, routeCities.departureCity) : undefined;
         const itineraryPurchaseDateTime = this.findDateTimeAfterMarker(lines, /Дата покупки/i, 12);
         const allDateTimes = this.extractDateTimes(compactText);
         const carrierSaleDateTime = this.findAlternativePurchaseDateTime(allDateTimes, itineraryPurchaseDateTime);
-        const departureDateTime = busTicketTrip?.departure ?? this.findDateTimeAfterMarker(lines, /^Отправление$/i, 40) ?? this.findDepartureDateTime(allDateTimes, itineraryPurchaseDateTime, carrierSaleDateTime);
-        const arrivalDate = busTicketTrip?.arrival?.date ?? this.extractArrivalDate(lines, compactText, departureDateTime, itineraryPurchaseDateTime);
-        const arrivalTime = busTicketTrip?.arrival?.time ?? this.extractArrivalTime(lines, compactText, departureDateTime, itineraryPurchaseDateTime, carrierSaleDateTime);
+        const legacyDepartureDateTime = busTicketTrip?.departure ?? this.findDateTimeAfterMarker(lines, /^Отправление$/i, 40) ?? this.findDepartureDateTime(allDateTimes, itineraryPurchaseDateTime, carrierSaleDateTime);
+        const arrivalDate = busTicketTrip?.arrival?.date ?? this.extractArrivalDate(lines, compactText, legacyDepartureDateTime, itineraryPurchaseDateTime);
+        const arrivalTime = busTicketTrip?.arrival?.time ?? this.extractArrivalTime(lines, compactText, legacyDepartureDateTime, itineraryPurchaseDateTime, carrierSaleDateTime);
+        const correctedDeparture = this.isBusTicketPage(compactText) ? this.extractBusTicketDepartureDateTime(lines, arrivalDate, arrivalTime) : undefined;
+        const departureDateTime = correctedDeparture ?? legacyDepartureDateTime;
         const carrierName = this.extractCarrierName(lines);
         // const ticketType = this.findValueAfterMarker(lines, /^Тип билета$/i, (value) => /^(Полный|Детский|Льготный)$/i.test(value), 10);
         const ticketType = this.extractFirstGroup(documentText, /Тип билета\s+(Полный|Детский|Льготный)/i);
@@ -161,8 +181,8 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         const trip: BusTicketTrip = {
             routeName,
             tripNumber: routeTable.tripNumber ?? documentRouteTable.tripNumber,
-            seat: busTicketTrip?.seat ?? routeTable.seat ?? documentRouteTable.tripNumber,
-            platform: busTicketTrip?.platform ?? routeTable.platform ?? documentRouteTable.tripNumber,
+            seat: busTicketTrip?.seat ?? routeTable.seat ?? documentRouteTable.seat,
+            platform: busTicketTrip?.platform ?? routeTable.platform ?? documentRouteTable.platform,
 
             departure: {
                 city: routeCities.departureCity,
@@ -914,51 +934,71 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
         return (this.dateKey(value.date) * 24 * 60 + minutes);
     }
 
+
     selectPageNumbers(analysis: PdfAnalysisResult): number[] | undefined {
         const pages = analysis.pages;
 
-        /*
-         * Специальное правило только для конкретного
-         * двухстраничного шаблона Busfor.
-         *
-         * Все остальные PDF продолжают обрабатываться
-         * стандартным способом: страница = билет.
-         */
-        if (!Array.isArray(pages) || pages.length !== 2) {
+        if (!Array.isArray(pages) || pages.length === 0) {
             return undefined;
         }
 
-        const firstPage = pages[0];
-        const secondPage = pages[1];
+        // Специальная обработка применяется только к PDF,
+        // содержащим маршрутные квитанции BUSFOR.
+        const hasItineraryReceipt = pages.some((page) =>
+            this.isItineraryReceiptPage(page.normalizedText)
+        );
 
-        if (!this.isItineraryReceiptPage(firstPage.normalizedText)) {
+        if (!hasItineraryReceipt) {
             return undefined;
         }
 
-        if (!this.isBusTicketPage(secondPage.normalizedText)) {
-            return undefined;
+        // Для этого формата каждый билет состоит из двух страниц.
+        if (pages.length % 2 !== 0) {
+            throw new Error(
+                `[BUSFOR PARSER] Invalid page count: ${pages.length}. ` +
+                `Expected receipt/ticket pairs.`
+            );
         }
 
-        const itineraryNumbers = this.extractItineraryNumbers(this.compact(firstPage.normalizedText));
+        const selectedPageNumbers: number[] = [];
 
-        if (!itineraryNumbers) {
-            return undefined;
+        for (let index = 0; index < pages.length; index += 2) {
+            const receiptPage = pages[index];
+            const ticketPage = pages[index + 1];
+
+            if (!this.isItineraryReceiptPage(receiptPage.normalizedText)) {
+                throw new Error(
+                    `[BUSFOR PARSER] Expected itinerary receipt ` +
+                    `on page ${receiptPage.pageNumber}.`
+                );
+            }
+
+            if (!this.isBusTicketPage(ticketPage.normalizedText)) {
+                throw new Error(
+                    `[BUSFOR PARSER] Expected bus ticket ` +
+                    `on page ${ticketPage.pageNumber}.`
+                );
+            }
+
+            // Проверяем принадлежность двух страниц одному билету.
+            if (!this.isSameBusforTicket(
+                receiptPage.normalizedText,
+                ticketPage.normalizedText
+            )) {
+                throw new Error(
+                    `[BUSFOR PARSER] Ticket numbers do not match ` +
+                    `on pages ${receiptPage.pageNumber} ` +
+                    `and ${ticketPage.pageNumber}.`
+                );
+            }
+
+            // Сохраняем только страницу проездного документа.
+            selectedPageNumbers.push(ticketPage.pageNumber);
         }
 
-        const secondPageText = this.compact(secondPage.normalizedText);
-        const sameTicket = new RegExp(`\\b${itineraryNumbers.itinerarySeries}\\s+` + `${itineraryNumbers.itineraryNumber}\\b`).test(secondPageText);
-
-        if (!sameTicket) {
-            return undefined;
-        }
-
-        /*
-         * Это именно нужный двухстраничный Busfor:
-         * страницу 1 игнорируем,
-         * страницу 2 парсим и сохраняем.
-         */
-        return [secondPage.pageNumber];
+        return selectedPageNumbers;
     }
+
 
     private isItineraryReceiptPage(text: string): boolean {
         return (/Маршрутная квитанция электронного билета/i.test(text) && /E-Ticket itinerary receipt/i.test(text) && /\bBUSFOR(?:\.RU)?\b/i.test(text));
@@ -1101,60 +1141,65 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
     }
 
     private extractBusTicketRouteName(lines: string[], compactText: string): string | undefined {
+        const departureMatch = compactText.match(/АС\s+отправления:\s*(.+?)(?=\s+Адрес:)/iu);
 
-        /*
-         * В новом Busfor BUS TICKET отправление присутствует
-         * в отдельной служебной строке:
-         *
-         * АС отправления: Остановка Нефтеюганск
-         * Адрес: улица Сургутская; дом 1/22
-         */
-        const departureMatch = compactText.match(/АС\s+отправления:\s*(?:Остановка\s+)?(.+?)(?=\s+Адрес:)/iu);
-        const departureCity = departureMatch?.[1] ? this.cleanText(departureMatch[1]) : undefined;
+        const departure = departureMatch?.[1]
+            ? this.extractBusTicketCity(departureMatch[1])
+            : undefined;
 
-        /*
-         * Пункт назначения в данном layout находится
-         * рядом с блоком ПРИБЫТИЕ / ARRIVAL:
-         *
-         * Курган - Автовокзал Курган площадь ...
-         */
-        const arrivalCity = this.extractBusTicketArrivalCity(lines);
+        const arrival = this.extractBusTicketArrivalCity(lines);
 
-        if (!departureCity || !arrivalCity) {
+        if (!departure || !arrival) {
             return undefined;
         }
 
-        return this.cleanRouteName(`${departureCity} - ${arrivalCity}`);
+        return this.cleanRouteName(`${departure} - ${arrival}`);
+    }
+
+    private extractBusTicketCity(value: string): string {
+        return this.cleanText(value)
+            .replace(/^(?:Остановка|Автовокзал)\s+/iu, "")
+            .replace(/\s+(?:Центральный\s+)?(?:АВ|Автовокзал)$/iu, "")
+            .trim();
     }
 
     private extractBusTicketArrivalCity(lines: string[]): string | undefined {
-        const markerIndex = lines.findIndex((line) => /ПРИБЫТИЕ\s*\/\s*ARRIVAL/i.test(line));
+
+        for (const sourceLine of lines) {
+            const line = this.cleanText(sourceLine)
+                .replace(/[‐‑‒–—−]/g, "-");
+
+            const match = line.match(
+                /^([\p{L}][\p{L}\s.'()-]{1,80}?)\s+-\s+.+?\s+РОССИЯ\s*\|/iu
+            );
+
+            if (match?.[1]) {
+                return this.cleanText(match[1]);
+            }
+        }
+
+
+        const markerIndex = lines.findIndex(line =>
+            /ПРИБЫТИЕ\s*\/\s*ARRIVAL/i.test(line)
+        );
 
         if (markerIndex < 0) {
             return undefined;
         }
 
-        /*
-         * Пункт прибытия располагается недалеко
-         * от заголовка ARRIVAL, поэтому ограничиваем
-         * область поиска.
-         */
         const endIndex = Math.min(lines.length, markerIndex + 20);
+
         for (let index = markerIndex + 1; index < endIndex; index++) {
             const line = this.cleanText(lines[index])
-                /*
-                 * В PDF может использоваться не обычный "-",
-                 * а длинное тире.
-                 */
-                .replace(/[‐-‒–—−]/g, "-");
+                .replace(/[‐‑‒–—−]/g, "-");
 
-            /*
-             * Например:
-             *
-             * Курган - Автовокзал Курган площадь ...
-             */
-            const match = line.match(/^([\p{L}][\p{L}\s.'()-]{1,80}?)\s+-\s+(?:Автовокзал|АВ|Аэропорт|ЖД)(?=\s|$|[,.;:])/iu);
-            if (match?.[1]) { return this.cleanText(match[1]); }
+            const match = line.match(
+                /^([\p{L}][\p{L}\s.'()-]{1,80}?)\s+-\s+(?:Автовокзал|АВ|Аэропорт|ЖД)(?=\s|["«]|$)/iu
+            );
+
+            if (match?.[1]) {
+                return this.cleanText(match[1]);
+            }
         }
 
         return undefined;
@@ -1202,6 +1247,196 @@ export class BusforBusTicketPdfParser implements BusTicketPdfParser {
 
     private roundMoney(value: number): number {
         return Math.round(value * 100) / 100;
+    }
+
+
+
+
+    private extractBusTicketRouteFromMarkers(lines: string[]): string | undefined {
+        const normalizedLines = lines.map(line => this.cleanText(line));
+
+        const departurePattern = /^\d{2}\.\d{2}\.\d{4}\s+([А-ЯЁ][А-Яа-яЁё-]*(?:\s+[А-ЯЁа-яё-]+){0,3})$/u;
+        const arrivalPattern = /^([А-ЯЁ][А-Яа-яЁё-]*(?:\s+[А-ЯЁа-яё-]+){0,3})\s*[-–—]\s*(?:(?:центральный|городской)\s+)?(?:Автовокзал|Остановка|АВ|Аэропорт|ЖД)(?=\s|["«]|$)/iu;
+
+        const departureCity = normalizedLines.map(line => line.match(departurePattern)?.[1]).find((value): value is string => Boolean(value));
+        const arrivalCity = normalizedLines.map(line => line.match(arrivalPattern)?.[1]).find((value): value is string => Boolean(value));
+        if (!departureCity || !arrivalCity) {
+            return undefined;
+        }
+
+        return this.cleanRouteName(
+            `${departureCity} - ${arrivalCity}`
+        );
+    }
+
+    private extractBusTicketDepartureDateTime(
+        lines: string[],
+        arrivalDate: string | undefined,
+        arrivalTime: string | undefined
+    ): ExtractedDateTime | undefined {
+        if (!arrivalDate || !arrivalTime) {
+            return undefined;
+        }
+
+        const datePattern = /\b\d{2}\.\d{2}\.\d{4}\b/g;
+        const timePattern = /\b\d{2}:\d{2}\b/g;
+
+        // Собираем даты из текстового слоя PDF.
+        const dates = [
+            ...new Set(
+                lines.flatMap(line =>
+                    [...line.matchAll(datePattern)].map(match => match[0])
+                )
+            )
+        ];
+
+        const arrivalKey = this.dateKey(arrivalDate);
+
+        // Используем только даты в пределах 90 дней до прибытия.
+        // Это исключает, в частности, дату рождения пассажира.
+        const candidates = dates
+            .filter(date => {
+                const key = this.dateKey(date);
+
+                if (key > arrivalKey) {
+                    return false;
+                }
+
+                const parsed = date.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+
+                if (!parsed) {
+                    return false;
+                }
+
+                const candidateUtc = Date.UTC(
+                    Number(parsed[3]),
+                    Number(parsed[2]) - 1,
+                    Number(parsed[1])
+                );
+
+                const arrivalParsed = arrivalDate.match(
+                    /^(\d{2})\.(\d{2})\.(\d{4})$/
+                );
+
+                if (!arrivalParsed) {
+                    return false;
+                }
+
+                const arrivalUtc = Date.UTC(
+                    Number(arrivalParsed[3]),
+                    Number(arrivalParsed[2]) - 1,
+                    Number(arrivalParsed[1])
+                );
+
+                const days = (arrivalUtc - candidateUtc) / 86_400_000;
+
+                return days >= 0 && days <= 90;
+            })
+            .sort((a, b) => this.dateKey(b) - this.dateKey(a));
+
+        // Ближайшая дата до прибытия — дата отправления.
+        // Для рейсов в пределах одного дня дата может совпадать.
+        const departureDate = candidates[0];
+
+        if (!departureDate) {
+            return undefined;
+        }
+
+        // Дата продажи обычно предшествует дате поездки.
+        const purchaseDate = candidates.find(
+            date => this.dateKey(date) < this.dateKey(departureDate)
+        );
+
+        // Извлекаем время продажи, которое в текстовом слое
+        // Busfor может находиться в следующей строке после даты.
+        let purchaseTime: string | undefined;
+
+        if (purchaseDate) {
+            const purchaseIndex = lines.findIndex(line =>
+                line.includes(purchaseDate)
+            );
+
+            if (purchaseIndex >= 0) {
+                const nearbyLines = lines.slice(
+                    purchaseIndex,
+                    purchaseIndex + 3
+                );
+
+                purchaseTime = nearbyLines
+                    .flatMap(line => line.match(timePattern) ?? [])[0];
+            }
+        }
+
+        const times = [
+            ...new Set(
+                lines.flatMap(line => line.match(timePattern) ?? [])
+            )
+        ];
+
+        const departureTimeCandidates = times.filter(time =>
+            time !== arrivalTime &&
+            time !== purchaseTime
+        );
+
+        // Не подставляем произвольное время, если кандидатов несколько.
+        if (departureTimeCandidates.length !== 1) {
+            return undefined;
+        }
+
+        return {
+            date: departureDate,
+            time: departureTimeCandidates[0]
+        };
+    }
+
+
+    private isSameBusforTicket(receiptText: string, ticketText: string): boolean {
+        const numbers = this.extractItineraryNumbers(
+            this.compact(receiptText)
+        );
+
+        if (!numbers) {
+            return false;
+        }
+
+        const expression = new RegExp(`\\b${numbers.itinerarySeries}\\s+` + `${numbers.itineraryNumber}\\b`);
+
+        return expression.test(this.compact(ticketText));
+    }
+
+
+    private getTicketDocumentContext(analysis: PdfAnalysisResult, documentAnalysis?: PdfAnalysisResult): Pick<PdfAnalysisResult, "normalizedText" | "lines"> {
+        const singlePageContext = { normalizedText: analysis.normalizedText, lines: analysis.lines };
+        const pages = documentAnalysis?.pages;
+
+        if (!Array.isArray(pages) || analysis.pageNumber === undefined) {
+            return singlePageContext;
+        }
+
+        const currentIndex = pages.findIndex(
+            (page) => page.pageNumber === analysis.pageNumber
+        );
+
+        if (currentIndex <= 0) {
+            return singlePageContext;
+        }
+
+        const receiptPage = pages[currentIndex - 1];
+
+        if (!this.isItineraryReceiptPage(receiptPage.normalizedText) || !this.isBusTicketPage(analysis.normalizedText)) {
+            return singlePageContext;
+        }
+
+        if (!this.isSameBusforTicket(receiptPage.normalizedText, analysis.normalizedText)) {
+            throw new Error(`[BUSFOR PARSER] Receipt and ticket mismatch ` + `for page ${analysis.pageNumber}.`);
+        }
+
+        // Контекст строго одной пары:
+        // квитанция + соответствующий проездной документ.
+        return {
+            normalizedText: [receiptPage.normalizedText, analysis.normalizedText].join("\n\n"),
+            lines: [...receiptPage.lines, ...analysis.lines]
+        };
     }
 
 }

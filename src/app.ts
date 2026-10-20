@@ -17,8 +17,8 @@ let time = 0
 let dateFrom: Date;
 let dateTo: Date;
 
-fileService.createDirectory(LOGGER_PATH)
-logger.info(`[MAIN APP] Directory for logging: ${LOGGER_PATH} created`)
+fileService.createDirectory(config.main.loggerPath)
+logger.info(`[MAIN APP] Directory for logging: ${config.main.loggerPath} created`)
 
 setSearchDate();
 logger.info(`[MAIN APP] Start tickets service`)

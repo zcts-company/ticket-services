@@ -104,7 +104,8 @@ export class AirMailService implements AirService {
                 loginMethod: "AUTH=PLAIN"
             },
             tls: {
-                minVersion: "TLSv1"
+                minVersion: "TLSv1",
+                ciphers: "DEFAULT@SECLEVEL=0"
             },
             connectionTimeout: this.options.connectionTimeout ?? 30_000,
             greetingTimeout: this.options.greetingTimeout ?? 30_000,
