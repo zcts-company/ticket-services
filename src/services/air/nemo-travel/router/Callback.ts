@@ -21,24 +21,24 @@ callback.use(validation(nemoOrder));
 callback.use(checkSuppliers());
 callback.use(checkStatus());
 
-callback.use('',asyncHandler(
-    async (req:any,res:Response,next) => {
-        logger.info(`[NEMO TRAVEL] Check current archive path, path of service: ${req.currentArchivePath}`)
-    if(req.currentArchivePath){
+// callback.use('',asyncHandler(
+//     async (req:any,res:Response,next) => {
+//         logger.info(`[NEMO TRAVEL] Check current archive path, path of service: ${req.currentArchivePath}`)
+//     if(req.currentArchivePath){
         
-        const directoryArhiveExist:boolean = await fileService.pathExsist(req.currentArchivePath);
+//         const directoryArhiveExist:boolean = await fileService.pathExsist(req.currentArchivePath);
         
-        if(!directoryArhiveExist){
-            await fileService.createDirectory(req.currentArchivePath)
-            logger.info(`[NEMO TRAVEL] Directory created by middlware of service: ${req.currentArchivePath}`);
-        }
-    } else {
-        logger.error(`[NEMO TRAVEL] Imposible created directory: ${req.currentArchivePath}`);
-    }
+//         if(!directoryArhiveExist){
+//             await fileService.createDirectory(req.currentArchivePath)
+//             logger.info(`[NEMO TRAVEL] Directory created by middlware of service: ${req.currentArchivePath}`);
+//         }
+//     } else {
+//         logger.error(`[NEMO TRAVEL] Imposible created directory: ${req.currentArchivePath}`);
+//     }
         
-        next()
-    }
-))
+//         next()
+//     }
+// ))
 // statusValid,
 callback.post('/callback',auth(),valid,supplierValid,asyncHandler(async(req:any, res:Response) => {
 

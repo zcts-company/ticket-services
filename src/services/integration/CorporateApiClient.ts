@@ -130,7 +130,7 @@ export class CorporateApiClient {
         const data = await response.json() as TokenResponse;
         this.token = data.access_token;
         this.tokenExpires = Date.now() + data.expires_in * 1000;
-        logger.info(`[CORPORATE API] Got access token for ${this.clientId}, expires in ${data.expires_in} s`);
+        logger.trace(`[CORPORATE API] Got access token for ${this.clientId}, expires in ${data.expires_in} s`);
 
         return this.token;
     }
