@@ -18,7 +18,7 @@ export class FileConverterXml {
     }
 
     jsonToXml(object: Object) {
-        const result = this.builder.buildObject(this.normalizeNumericKeys(object))
+        const result = this.builder.buildObject(this.normalizeXmlKeys(object))
         return result;
     }
 
@@ -29,18 +29,44 @@ export class FileConverterXml {
         });
     }
 
-    private normalizeNumericKeys(obj: any): any {
+    // private normalizeNumericKeys(obj: any): any {
+    //     if (Array.isArray(obj)) {
+    //         return obj.map(item => this.normalizeNumericKeys(item));
+    //     }
+
+    //     if (obj !== null && typeof obj === "object") {
+    //         const newObj: any = {};
+    //         for (const key in obj) {
+    //             const value = obj[key];
+    //             const normalizedKey = /^[0-9]+$/.test(key) ? `key_${key}` : key;
+    //             newObj[normalizedKey] = this.normalizeNumericKeys(value);
+    //         }
+    //         return newObj;
+    //     }
+
+    //     return obj;
+    // }
+
+    private normalizeXmlKeys(obj: any): any {
         if (Array.isArray(obj)) {
-            return obj.map(item => this.normalizeNumericKeys(item));
+            return obj.map(item => this.normalizeXmlKeys(item));
         }
 
         if (obj !== null && typeof obj === "object") {
             const newObj: any = {};
-            for (const key in obj) {
-                const value = obj[key];
-                const normalizedKey = /^[0-9]+$/.test(key) ? `key_${key}` : key;
-                newObj[normalizedKey] = this.normalizeNumericKeys(value);
+
+            for (const [key, value] of Object.entries(obj)) {
+                // Заменяем недопустимые символы в именах XML-элементов
+                let normalizedKey = key.replace(/[^a-zA-Z0-9_.-]/g, "_");
+
+                // Имя XML-элемента не должно начинаться с цифры, точки или дефиса
+                if (!/^[a-zA-Z_]/.test(normalizedKey)) {
+                    normalizedKey = `key_${normalizedKey}`;
+                }
+
+                newObj[normalizedKey] = this.normalizeXmlKeys(value);
             }
+
             return newObj;
         }
 

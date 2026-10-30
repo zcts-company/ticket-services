@@ -31,12 +31,12 @@ if (config.main.servers.api.enabled) {
     server.use(bodyParser.urlencoded({ extended: true }));
     server.use(bodyParser.json());
 
+    server.use("/api", auth(), mainRouter);
+    server.use(errorHandler);
+
     server.listen(config.main.servers.api.port, () => {
         logger.info(`[API SERVER] Api server listening on port ${config.main.servers.api.port}`);
-        server.use(errorHandler);
     });
-
-    server.use("/api", auth(), mainRouter)
 
 }
 
