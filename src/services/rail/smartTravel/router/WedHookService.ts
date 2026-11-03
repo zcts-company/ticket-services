@@ -71,11 +71,11 @@ async function createFile(data: SmartTravelWebhook, updated: Date): Promise<stri
     logger.info("[SMART TRAVEL WEBHOOK] XML conversion completed");
 
     const orderId = data.OrderItem.OrderId;
-    const status = data.OrderItem.DetailedOperationStatus.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const operationType = data.OrderItem.OperationType.replace(/[^a-zA-Z0-9_-]/g, "_");
     const serviceType = data.OrderItem?.ServiceTypeInfo;
     const transportType = serviceType === "RailwayTickets" ? "rail" : serviceType === "BusTickets" ? "bus" : "unknown";
     const timestamp = updated.toISOString().replace(/[:.]/g, "-");
-    const fileName = `${transportType}_${orderId}_${status}_${timestamp}.xml`;
+    const fileName = `${transportType}_${orderId}_${operationType}_${timestamp}.xml`;
     const filePath = join(currentDirectory, fileName);
 
     logger.info(`[SMART TRAVEL WEBHOOK] Writing file: ${filePath}`);
